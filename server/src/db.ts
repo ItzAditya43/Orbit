@@ -1,0 +1,204 @@
+import Database from "better-sqlite3";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const dataDir = path.join(__dirname, "..", "data");
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+export const db = new Database(path.join(dataDir, "productivity.sqlite"));
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS projects (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  color TEXT,
+  description TEXT,
+  is_archived INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  color TEXT
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'open', -- open | in_progress | done | archived
+  priority TEXT NOT NULL DEFAULT 'none', -- none | low | medium | high | urgent
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  parent_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+  is_inbox INTEGER NOT NULL DEFAULT 0,
+  estimate_minutes INTEGER,
+  actual_minutes INTEGER NOT NULL DEFAULT 0,
+  due_date TEXT,
+  start_date TEXT,
+  scheduled_at TEXT,
+  recurrence TEXT, -- none | daily | weekly | monthly
+  order_index INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_tags (
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, tag_id)
+);
+
+CREATE TABLE IF NOT EXISTS task_dependencies (
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  blocks_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, blocks_task_id)
+);
+
+CREATE TABLE IF NOT EXISTS time_entries (
+  id TEXT PRIMARY KEY,
+  task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  duration_seconds INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS focus_sessions (
+  id TEXT PRIMARY KEY,
+  task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  mode TEXT NOT NULL DEFAULT 'pomodoro', -- pomodoro | flowtime | stopwatch | custom
+  planned_minutes INTEGER,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  was_completed INTEGER NOT NULL DEFAULT 0,
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  starts_at TEXT NOT NULL,
+  ends_at TEXT NOT NULL,
+  task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  notes TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS boundaries (
+  id TEXT PRIMARY KEY,
+  category TEXT NOT NULL, -- main | hobby | game | restricted
+  name TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS scope_review_items (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  kind TEXT NOT NULL, -- project | task | idea
+  status TEXT NOT NULL DEFAULT 'pending', -- pending | parked | allowed | rejected
+  reason TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS goals (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  horizon TEXT NOT NULL DEFAULT 'monthly', -- life | annual | semester | monthly | weekly | daily
+  parent_id TEXT REFERENCES goals(id) ON DELETE CASCADE,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  target_date TEXT,
+  progress REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active', -- active | done | abandoned
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS habits (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  frequency TEXT NOT NULL DEFAULT 'daily', -- daily | weekly | custom
+  target_per_period INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS habit_logs (
+  id TEXT PRIMARY KEY,
+  habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  UNIQUE(habit_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS notes (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS automations (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  trigger_type TEXT NOT NULL, -- task_completed | task_overdue | timer_started | timer_stopped | focus_started | focus_ended | daily_start
+  action_type TEXT NOT NULL, -- create_task | notify | webhook | run_ai_workflow
+  config_json TEXT NOT NULL DEFAULT '{}',
+  is_enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS automation_runs (
+  id TEXT PRIMARY KEY,
+  automation_id TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+  ran_at TEXT NOT NULL,
+  result TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ai_actions (
+  id TEXT PRIMARY KEY,
+  tool_name TEXT NOT NULL,
+  args_json TEXT NOT NULL,
+  result_json TEXT,
+  status TEXT NOT NULL DEFAULT 'pending', -- pending | approved | executed | rejected
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  message TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'automation',
+  is_read INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS api_tokens (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
+  title, notes, content='tasks', content_rowid='rowid'
+);
+
+CREATE TRIGGER IF NOT EXISTS tasks_ai AFTER INSERT ON tasks BEGIN
+  INSERT INTO tasks_fts(rowid, title, notes) VALUES (new.rowid, new.title, new.notes);
+END;
+CREATE TRIGGER IF NOT EXISTS tasks_ad AFTER DELETE ON tasks BEGIN
+  INSERT INTO tasks_fts(tasks_fts, rowid, title, notes) VALUES ('delete', old.rowid, old.title, old.notes);
+END;
+CREATE TRIGGER IF NOT EXISTS tasks_au AFTER UPDATE ON tasks BEGIN
+  INSERT INTO tasks_fts(tasks_fts, rowid, title, notes) VALUES ('delete', old.rowid, old.title, old.notes);
+  INSERT INTO tasks_fts(rowid, title, notes) VALUES (new.rowid, new.title, new.notes);
+END;
+`);

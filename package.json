@@ -1,0 +1,15 @@
+{
+  "name": "orbit",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev:server": "npm --prefix server run dev",
+    "dev:web": "npm --prefix web run dev",
+    "dev": "concurrently -n server,web -c blue,green \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:desktop": "concurrently -n server,tauri -c blue,magenta \"npm run dev:server\" \"npm --prefix web run tauri dev\"",
+    "cli": "node cli/src/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

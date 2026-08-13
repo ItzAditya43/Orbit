@@ -1,0 +1,44 @@
+import express from "express";
+import cors from "cors";
+import "./db.js";
+import { tasksRouter } from "./routes/tasks.js";
+import { projectsRouter } from "./routes/projects.js";
+import { tagsRouter } from "./routes/tags.js";
+import { focusRouter } from "./routes/focus.js";
+import { timeEntriesRouter } from "./routes/timeEntries.js";
+import { calendarRouter } from "./routes/calendar.js";
+import { analyticsRouter } from "./routes/analytics.js";
+import { boundariesRouter, scopeReviewRouter } from "./routes/boundaries.js";
+import { goalsRouter } from "./routes/goals.js";
+import { habitsRouter } from "./routes/habits.js";
+import { notesRouter } from "./routes/notes.js";
+import { automationsRouter, notificationsRouter } from "./routes/automations.js";
+import { aiRouter } from "./routes/ai.js";
+import { syncRouter } from "./routes/sync.js";
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
+app.use("/api/tasks", tasksRouter);
+app.use("/api/projects", projectsRouter);
+app.use("/api/tags", tagsRouter);
+app.use("/api/focus-sessions", focusRouter);
+app.use("/api/time-entries", timeEntriesRouter);
+app.use("/api/calendar", calendarRouter);
+app.use("/api/analytics", analyticsRouter);
+app.use("/api/boundaries", boundariesRouter);
+app.use("/api/scope-review", scopeReviewRouter);
+app.use("/api/goals", goalsRouter);
+app.use("/api/habits", habitsRouter);
+app.use("/api/notes", notesRouter);
+app.use("/api/automations", automationsRouter);
+app.use("/api/notifications", notificationsRouter);
+app.use("/api/ai", aiRouter);
+app.use("/api/sync", syncRouter);
+
+const PORT = process.env.PORT ? Number(process.env.PORT) : 4310;
+app.listen(PORT, () => {
+  console.log(`orbit server listening on http://localhost:${PORT}`);
+});

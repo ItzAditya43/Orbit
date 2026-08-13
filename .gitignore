@@ -1,0 +1,8 @@
+node_modules/
+dist/
+server/data/*.sqlite*
+.DS_Store
+
+# Rust / Tauri build output
+web/src-tauri/target/
+web/src-tauri/gen/
