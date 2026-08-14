@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
 import { CalendarEventModal } from "../components/CalendarEventModal";
 import { EmptyState } from "../components/EmptyState";
+import { CalendarOffIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "../icons";
 
 type ViewMode = "month" | "week" | "agenda";
 
@@ -86,8 +87,8 @@ export default function Calendar() {
         <div className="flex items-center gap-2">
           {view !== "agenda" && (
             <div className="flex items-center gap-1">
-              <button onClick={() => nav(-1)} className="h-8 w-8 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800">
-                ‹
+              <button onClick={() => nav(-1)} className="h-8 w-8 flex items-center justify-center rounded-lg border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500">
+                <ChevronLeftIcon size={15} />
               </button>
               <button
                 onClick={() => setAnchor(new Date())}
@@ -95,8 +96,8 @@ export default function Calendar() {
               >
                 Today
               </button>
-              <button onClick={() => nav(1)} className="h-8 w-8 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800">
-                ›
+              <button onClick={() => nav(1)} className="h-8 w-8 flex items-center justify-center rounded-lg border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500">
+                <ChevronRightIcon size={15} />
               </button>
             </div>
           )}
@@ -113,9 +114,9 @@ export default function Calendar() {
           </div>
           <button
             onClick={() => setModalDate(key(new Date()))}
-            className="h-8 px-3 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-xs font-medium"
+            className="h-8 px-3 flex items-center gap-1.5 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-xs font-medium"
           >
-            + Event
+            <PlusIcon size={13} /> Event
           </button>
         </div>
       </div>
@@ -206,9 +207,9 @@ export default function Calendar() {
                 </div>
                 <button
                   onClick={() => setModalDate(key(d))}
-                  className="mt-2 w-full text-[10px] text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 text-left"
+                  className="mt-2 w-full flex items-center gap-1 text-[10px] text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
                 >
-                  + Add
+                  <PlusIcon size={11} /> Add
                 </button>
               </div>
             );
@@ -244,7 +245,7 @@ export default function Calendar() {
               </div>
             ))}
           {byDay.size === 0 && !isLoading && (
-            <EmptyState icon="🗓️" title="Nothing on the calendar" subtitle="Events and scheduled tasks in the next 30 days will show up here." />
+            <EmptyState icon={CalendarOffIcon} title="Nothing on the calendar" subtitle="Events and scheduled tasks in the next 30 days will show up here." />
           )}
         </div>
       )}

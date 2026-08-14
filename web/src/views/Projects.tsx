@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useState } from "react";
 import { EmptyState } from "../components/EmptyState";
+import { FolderIcon } from "../icons";
 
 const COLORS = ["#f87171", "#fb923c", "#fbbf24", "#4ade80", "#22d3ee", "#818cf8", "#c084fc", "#f472b6"];
 
@@ -41,7 +42,7 @@ export default function Projects() {
       </form>
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
       {projects.length === 0 && !isLoading ? (
-        <EmptyState icon="📁" title="No projects yet" subtitle="Group related tasks into a project to track progress and see it on the kanban board." />
+        <EmptyState icon={FolderIcon} title="No projects yet" subtitle="Group related tasks into a project to track progress and see it on the kanban board." />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map((p) => {

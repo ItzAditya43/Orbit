@@ -3,6 +3,7 @@ import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
 import { QuickAdd } from "../components/QuickAdd";
 import { EmptyState } from "../components/EmptyState";
+import { SunIcon, CircleCheckIcon } from "../icons";
 import { useQuickAddStore } from "../quickAddStore";
 import { useToastStore } from "../toastStore";
 
@@ -95,7 +96,7 @@ export default function Today() {
         ))}
         {open.length === 0 && !isLoading && done.length === 0 && (
           <EmptyState
-            icon="🌤️"
+            icon={SunIcon}
             title="Nothing planned for today"
             subtitle="Add a task above, or capture something in your Inbox to sort out later."
             actionLabel="Quick add a task"
@@ -103,7 +104,7 @@ export default function Today() {
           />
         )}
         {open.length === 0 && !isLoading && done.length > 0 && (
-          <EmptyState icon="🎉" title="All done for today" subtitle="Nice work — everything on today's list is complete." />
+          <EmptyState icon={CircleCheckIcon} title="All done for today" subtitle="Nice work — everything on today's list is complete." />
         )}
       </div>
 

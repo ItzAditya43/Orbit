@@ -1,11 +1,13 @@
+import type { ComponentType } from "react";
+
 export function EmptyState({
-  icon,
+  icon: Icon,
   title,
   subtitle,
   actionLabel,
   onAction,
 }: {
-  icon: string;
+  icon: ComponentType<{ size?: number; className?: string }>;
   title: string;
   subtitle?: string;
   actionLabel?: string;
@@ -13,7 +15,9 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center text-center py-16 px-6 rounded-2xl border border-dashed border-neutral-200 dark:border-neutral-800 animate-pop-in">
-      <div className="text-4xl mb-3 select-none">{icon}</div>
+      <div className="h-11 w-11 rounded-full flex items-center justify-center mb-3 border border-neutral-200 dark:border-neutral-800 text-neutral-400">
+        <Icon size={20} />
+      </div>
       <p className="text-sm font-medium text-neutral-600 dark:text-neutral-300">{title}</p>
       {subtitle && <p className="text-xs text-neutral-400 mt-1 max-w-xs">{subtitle}</p>}
       {actionLabel && onAction && (

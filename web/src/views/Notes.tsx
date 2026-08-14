@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api";
 import { EmptyState } from "../components/EmptyState";
+import { NoteIcon, PinIcon } from "../icons";
 
 const COLORS = [
   { name: "default", light: "bg-white dark:bg-neutral-900", swatch: "bg-white dark:bg-neutral-900 border" },
@@ -75,7 +76,7 @@ function NoteCard({ note, invalidate }: { note: any; invalidate: () => void }) {
         }`}
         title={note.pinned ? "Unpin" : "Pin"}
       >
-        📌
+        <PinIcon size={14} className={note.pinned ? "fill-current" : ""} />
       </button>
 
       {!editing && (
@@ -188,7 +189,7 @@ export default function Notes() {
 
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
       {notes.length === 0 && !isLoading ? (
-        <EmptyState icon="🗒️" title="No notes yet" subtitle="Jot down an idea, meeting notes, or anything worth keeping." />
+        <EmptyState icon={NoteIcon} title="No notes yet" subtitle="Jot down an idea, meeting notes, or anything worth keeping." />
       ) : (
         <div className="columns-1 sm:columns-2 md:columns-3 gap-3">
           {notes.map((n: any) => (

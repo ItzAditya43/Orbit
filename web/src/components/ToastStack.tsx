@@ -1,4 +1,5 @@
 import { useToastStore } from "../toastStore";
+import { XIcon } from "../icons";
 
 export function ToastStack() {
   const { toasts, dismiss } = useToastStore();
@@ -23,7 +24,7 @@ export function ToastStack() {
             </button>
           )}
           <button onClick={() => dismiss(t.id)} className="text-neutral-400 hover:text-white dark:hover:text-neutral-900 px-1">
-            ✕
+            <XIcon size={13} />
           </button>
         </div>
       ))}

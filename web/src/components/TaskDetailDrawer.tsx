@@ -4,6 +4,7 @@ import { api, type Priority, type Task } from "../api";
 import { useTaskDetailStore } from "../taskDetailStore";
 import { PriorityPicker } from "./PriorityPicker";
 import { useToastStore } from "../toastStore";
+import { CheckIcon, XIcon } from "../icons";
 
 export function TaskDetailDrawer() {
   const { openTaskId, close } = useTaskDetailStore();
@@ -79,7 +80,7 @@ export function TaskDetailDrawer() {
                   task.status === "done" ? "bg-emerald-500 border-emerald-500" : "border-neutral-400 dark:border-neutral-600"
                 }`}
               >
-                {task.status === "done" && <span className="text-white text-[10px] animate-check-pop">✓</span>}
+                {task.status === "done" && <CheckIcon size={11} className="text-white animate-check-pop" strokeWidth={2.5} />}
               </button>
               <textarea
                 value={title}
@@ -91,7 +92,7 @@ export function TaskDetailDrawer() {
                 }`}
               />
               <button onClick={close} className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 shrink-0">
-                ✕
+                <XIcon size={16} />
               </button>
             </div>
 
@@ -166,9 +167,9 @@ export function TaskDetailDrawer() {
                         await api.tasks.remove(s.id);
                         invalidate();
                       }}
-                      className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 text-xs"
+                      className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500"
                     >
-                      ✕
+                      <XIcon size={13} />
                     </button>
                   </div>
                 ))}

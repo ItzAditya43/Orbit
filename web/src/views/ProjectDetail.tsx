@@ -5,6 +5,7 @@ import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
 import { QuickAdd } from "../components/QuickAdd";
 import { EmptyState } from "../components/EmptyState";
+import { CircleCheckIcon, ArrowLeftIcon } from "../icons";
 
 const COLUMNS: { status: Task["status"]; label: string }[] = [
   { status: "open", label: "Open" },
@@ -49,8 +50,8 @@ export default function ProjectDetail() {
 
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-6">
-      <Link to="/projects" className="text-xs text-neutral-400 hover:underline">
-        ← Projects
+      <Link to="/projects" className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200">
+        <ArrowLeftIcon size={13} /> Projects
       </Link>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -81,7 +82,7 @@ export default function ProjectDetail() {
             <TaskRow key={t.id} task={t} onToggle={onToggle} onDelete={onDelete} />
           ))}
           {tasks.length === 0 && !isLoading && (
-            <EmptyState icon="✅" title="No tasks yet" subtitle="Add the first task above to start tracking progress on this project." />
+            <EmptyState icon={CircleCheckIcon} title="No tasks yet" subtitle="Add the first task above to start tracking progress on this project." />
           )}
         </div>
       ) : (

@@ -3,6 +3,7 @@ import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
 import { QuickAdd } from "../components/QuickAdd";
 import { EmptyState } from "../components/EmptyState";
+import { InboxIcon } from "../icons";
 import { useToastStore } from "../toastStore";
 
 export default function Inbox() {
@@ -68,7 +69,7 @@ export default function Inbox() {
           </div>
         ))}
         {tasks.length === 0 && !isLoading && (
-          <EmptyState icon="📥" title="Inbox zero" subtitle="Anything you capture without a date lands here — sort it into a project when you're ready." />
+          <EmptyState icon={InboxIcon} title="Inbox zero" subtitle="Anything you capture without a date lands here — sort it into a project when you're ready." />
         )}
       </div>
     </div>

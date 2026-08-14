@@ -7,6 +7,23 @@ import { QuickAddModal } from "./components/QuickAddModal";
 import { TaskDetailDrawer } from "./components/TaskDetailDrawer";
 import { ToastStack } from "./components/ToastStack";
 import { UpdateChecker } from "./components/UpdateChecker";
+import {
+  SunIcon,
+  MoonIcon,
+  InboxIcon,
+  CalendarDaysIcon,
+  FolderIcon,
+  TargetIcon,
+  ClockIcon,
+  RocketIcon,
+  RepeatIcon,
+  NoteIcon,
+  CompassIcon,
+  ZapIcon,
+  BarChartIcon,
+  SearchIcon,
+  PlusIcon,
+} from "./icons";
 import Today from "./views/Today";
 import Inbox from "./views/Inbox";
 import Upcoming from "./views/Upcoming";
@@ -27,30 +44,30 @@ const NAV_GROUPS = [
   {
     label: "Plan",
     items: [
-      { to: "/", label: "Today", icon: "☀️", end: true },
-      { to: "/inbox", label: "Inbox", icon: "📥" },
-      { to: "/upcoming", label: "Upcoming", icon: "📅" },
-      { to: "/calendar", label: "Calendar", icon: "🗓️" },
-      { to: "/projects", label: "Projects", icon: "📁" },
+      { to: "/", label: "Today", icon: SunIcon, end: true },
+      { to: "/inbox", label: "Inbox", icon: InboxIcon },
+      { to: "/upcoming", label: "Upcoming", icon: CalendarDaysIcon },
+      { to: "/calendar", label: "Calendar", icon: CalendarDaysIcon },
+      { to: "/projects", label: "Projects", icon: FolderIcon },
     ],
   },
   {
     label: "Do",
     items: [
-      { to: "/focus", label: "Focus", icon: "🎯" },
-      { to: "/time", label: "Time", icon: "⏱️" },
-      { to: "/goals", label: "Goals", icon: "🚀" },
-      { to: "/habits", label: "Habits", icon: "🔁" },
-      { to: "/notes", label: "Notes", icon: "🗒️" },
+      { to: "/focus", label: "Focus", icon: TargetIcon },
+      { to: "/time", label: "Time", icon: ClockIcon },
+      { to: "/goals", label: "Goals", icon: RocketIcon },
+      { to: "/habits", label: "Habits", icon: RepeatIcon },
+      { to: "/notes", label: "Notes", icon: NoteIcon },
     ],
   },
   {
     label: "Reflect",
     items: [
-      { to: "/boundaries", label: "Rigid", icon: "🧭" },
-      { to: "/automations", label: "Automations", icon: "⚡" },
-      { to: "/analytics", label: "Analytics", icon: "📊" },
-      { to: "/search", label: "Search", icon: "🔎" },
+      { to: "/boundaries", label: "Rigid", icon: CompassIcon },
+      { to: "/automations", label: "Automations", icon: ZapIcon },
+      { to: "/analytics", label: "Analytics", icon: BarChartIcon },
+      { to: "/search", label: "Search", icon: SearchIcon },
     ],
   },
 ];
@@ -89,7 +106,7 @@ export default function App() {
           onClick={openQuickAdd}
           className="flex items-center gap-2 px-3 py-2 rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm font-medium shadow-sm hover:opacity-90 transition-opacity"
         >
-          <span className="text-base leading-none">+</span> Quick add
+          <PlusIcon size={15} /> Quick add
           <span className="ml-auto text-[10px] opacity-60 font-normal">N</span>
         </button>
 
@@ -100,6 +117,7 @@ export default function App() {
               <div className="space-y-0.5">
                 {group.items.map((item) => {
                   const isActive = item.end ? location.pathname === item.to : location.pathname.startsWith(item.to);
+                  const Icon = item.icon;
                   return (
                     <NavLink
                       key={item.to}
@@ -112,7 +130,7 @@ export default function App() {
                       }`}
                     >
                       {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-neutral-900 dark:bg-white" />}
-                      <span className="text-base leading-none">{item.icon}</span>
+                      <Icon size={16} className={isActive ? "text-neutral-900 dark:text-white" : "text-neutral-400"} />
                       {item.label}
                     </NavLink>
                   );
@@ -126,7 +144,7 @@ export default function App() {
           onClick={toggleTheme}
           className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm text-left text-neutral-500 hover:bg-white/60 dark:hover:bg-neutral-900/60"
         >
-          <span className="text-base leading-none">{theme === "dark" ? "☀️" : "🌙"}</span>
+          {theme === "dark" ? <SunIcon size={16} /> : <MoonIcon size={16} />}
           {theme === "dark" ? "Light mode" : "Dark mode"}
         </button>
       </aside>

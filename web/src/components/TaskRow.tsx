@@ -3,6 +3,7 @@ import { PriorityPicker } from "./PriorityPicker";
 import { useTaskDetailStore } from "../taskDetailStore";
 import { api } from "../api";
 import { useQueryClient } from "@tanstack/react-query";
+import { CheckIcon, TrashIcon } from "../icons";
 
 function dueBadge(due: string | null) {
   if (!due) return null;
@@ -47,7 +48,7 @@ export function TaskRow({
           done ? "bg-emerald-500 border-emerald-500" : "border-neutral-300 dark:border-neutral-600 hover:border-emerald-400"
         }`}
       >
-        {done && <span className="text-white text-[10px] animate-check-pop">✓</span>}
+        {done && <CheckIcon size={11} className="text-white animate-check-pop" strokeWidth={2.5} />}
       </button>
 
       <PriorityPicker value={task.priority} onChange={setPriority} />
@@ -77,9 +78,9 @@ export function TaskRow({
             e.stopPropagation();
             onDelete(task);
           }}
-          className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 text-xs px-1 transition-opacity"
+          className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 px-1 transition-opacity"
         >
-          ✕
+          <TrashIcon size={13} />
         </button>
       </div>
     </div>
