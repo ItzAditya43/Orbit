@@ -54,6 +54,55 @@ cli/      Node CLI hitting the same API
 logo.png  App icon / brand mark, used as-is for the Tauri app icon and web favicon
 ```
 
+## Publishing an update
+
+Orbit's AppImage build has an in-app updater (Tauri's updater plugin). Users on that build get
+notified automatically when a newer version is released — they don't need to redownload
+anything manually. To ship a new version:
+
+1. Bump `"version"` in `web/src-tauri/tauri.conf.json`.
+2. Build and sign (the signing key lives outside the repo, at `~/.tauri/orbit.key` on the
+   machine that cuts releases — **never commit it**):
+   ```
+   export TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/orbit.key)
+   export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+   cd web && npx tauri build
+   ```
+   This produces `Orbit_<version>_amd64.AppImage` plus a matching `.sig` file under
+   `web/src-tauri/target/release/bundle/appimage/`.
+3. Write a `latest.json` manifest (the updater's endpoint, configured in `tauri.conf.json`, is
+   `https://github.com/ItzAditya43/Orbit/releases/latest/download/latest.json`):
+   ```json
+   {
+     "version": "<version>",
+     "notes": "<what changed>",
+     "pub_date": "<ISO 8601 timestamp>",
+     "platforms": {
+       "linux-x86_64": {
+         "signature": "<contents of the .sig file>",
+         "url": "https://github.com/ItzAditya43/Orbit/releases/download/v<version>/Orbit_<version>_amd64.AppImage"
+       }
+     }
+   }
+   ```
+4. Tag and publish a GitHub release with that exact tag (`v<version>`), attaching the
+   `.AppImage`, `.sig`, `.deb`, `.rpm`, and `latest.json`:
+   ```
+   git tag -a v<version> -m "Orbit v<version>"
+   git push origin v<version>
+   gh release create v<version> Orbit_<version>_amd64.AppImage Orbit_<version>_amd64.AppImage.sig \
+     Orbit_<version>_amd64.deb Orbit-<version>-1.x86_64.rpm latest.json --title "..." --notes "..."
+   ```
+
+Once that's live, existing AppImage installs will surface the update the next time they launch
+or check manually — no separate distribution step needed. The `.deb`/`.rpm` builds don't get
+in-app updates (Tauri's updater doesn't manage system package formats); those users redownload
+from Releases.
+
+**If the signing key is ever lost**, a new keypair has to be generated and the `pubkey` in
+`tauri.conf.json` updated — but every install running the old public key will stop trusting
+future updates and won't auto-update past that point. Back the private key up somewhere safe.
+
 ## What's implemented — tested end-to-end, not just written
 
 Every endpoint below was hit live against a running server this session (create/read/update/
@@ -63,13 +112,17 @@ not what the code merely intends to do.
 **Core task system**: tasks, unlimited-depth subtasks, projects, tags, priorities, due/start/
 scheduled dates, task dependencies (blocked-by), full-text search (SQLite FTS5).
 
-**Views**: Today, Inbox with quick capture and project routing, Upcoming (grouped by date),
-Projects (list view + kanban board with drag-and-drop), internal Calendar (week view, tasks
-overlaid as chips), Search, Analytics (completion trends, focus minutes/day, project velocity,
-overdue count), dark/light theme.
+**Views**: Today (greeting header, stats, progress bar), Inbox with quick capture and project
+routing, Upcoming (grouped by date), Projects (colorful cards + kanban board with
+drag-and-drop), a full internal Calendar (month grid / week / 30-day agenda, with a create/edit
+event modal — color, all-day, location, linked project — and scheduled tasks overlaid), Search,
+Analytics (completion trends, focus minutes/day, project velocity, overdue count), dark/light
+theme, a task detail drawer (click any task for inline editing, subtasks with a progress bar),
+a global quick-add modal (`N` key), and toasts with undo on complete/delete.
 
-**Focus & time**: Pomodoro timer with session logging, manual time-entry tracking with daily
-totals.
+**Focus & time**: Pomodoro timer with a circular progress ring, selectable durations
+(15/25/45/60m), pause/resume, skip break, session logging, and manual time-entry tracking
+with daily totals.
 
 **Recurring tasks**: daily/weekly/monthly — completing a recurring task spawns the next
 occurrence automatically.
@@ -98,10 +151,14 @@ interpolation and run history logged.
 **Backup/restore**: full local JSON export and import via `/api/sync`, verified round-trip.
 
 **Linux desktop shell (Tauri)**: wraps the same web UI, confirmed compiling against the real
-Rust/GTK/webkit2gtk toolchain. System tray (open / quick capture / quit), global hotkey
-(Ctrl+Shift+Space) for quick capture from anywhere on the desktop, desktop notifications,
-close-to-tray background behavior. App icon generated from `logo.png` for all platforms
-Tauri supports.
+Rust/GTK/webkit2gtk toolchain. System tray (open / quick capture / check for updates / quit),
+global hotkey (Ctrl+Shift+Space) for quick capture from anywhere on the desktop, desktop
+notifications, close-to-tray background behavior. App icon generated from `logo.png` for all
+platforms Tauri supports.
+
+**In-app auto-updates**: the AppImage build checks for updates on launch and from the tray
+menu, and can download, install, and relaunch itself — verified against a real signed release
+manifest published to this repo's GitHub Releases. See "Publishing an update" below.
 
 **CLI**: `task add/list/done`, `timer start/stop`, `today`, `focus`/`focus-end`, `ai` — all
 verified against a live server.
@@ -138,6 +195,12 @@ verified against a live server.
 - **Kanban only has three fixed columns** (Open/Doing/Done) — no custom statuses or swimlanes.
 - **Analytics has no date-range picker** — it's hardcoded to the last 14 days / all-time
   totals.
+- **Auto-updates only cover the AppImage build.** `.deb`/`.rpm` installs have no update
+  mechanism — Tauri's updater plugin manages its own artifact, not system package managers.
+- **The update-check UI is minimal** — a toast on launch/tray-click with an install button.
+  No changelog view, no "skip this version," no rollback if an update turns out broken.
+- **Calendar has no drag-to-reschedule.** Events and tasks show correctly, and clicking one
+  opens the edit modal, but there's no drag-and-drop between days yet.
 
 ## Honest bottom line
 
