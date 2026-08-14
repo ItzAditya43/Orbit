@@ -86,9 +86,14 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   title TEXT NOT NULL,
   starts_at TEXT NOT NULL,
   ends_at TEXT NOT NULL,
+  all_day INTEGER NOT NULL DEFAULT 0,
+  color TEXT,
+  location TEXT,
   task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
   notes TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS boundaries (
@@ -211,3 +216,11 @@ const notesColumns = db.prepare("PRAGMA table_info(notes)").all() as { name: str
 const notesColumnNames = new Set(notesColumns.map((c) => c.name));
 if (!notesColumnNames.has("color")) db.exec("ALTER TABLE notes ADD COLUMN color TEXT");
 if (!notesColumnNames.has("pinned")) db.exec("ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
+
+const eventColumns = db.prepare("PRAGMA table_info(calendar_events)").all() as { name: string }[];
+const eventColumnNames = new Set(eventColumns.map((c) => c.name));
+if (!eventColumnNames.has("all_day")) db.exec("ALTER TABLE calendar_events ADD COLUMN all_day INTEGER NOT NULL DEFAULT 0");
+if (!eventColumnNames.has("color")) db.exec("ALTER TABLE calendar_events ADD COLUMN color TEXT");
+if (!eventColumnNames.has("location")) db.exec("ALTER TABLE calendar_events ADD COLUMN location TEXT");
+if (!eventColumnNames.has("project_id")) db.exec("ALTER TABLE calendar_events ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL");
+if (!eventColumnNames.has("updated_at")) db.exec("ALTER TABLE calendar_events ADD COLUMN updated_at TEXT");

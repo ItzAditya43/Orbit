@@ -6,6 +6,7 @@ import { AICommandBar } from "./components/AICommandBar";
 import { QuickAddModal } from "./components/QuickAddModal";
 import { TaskDetailDrawer } from "./components/TaskDetailDrawer";
 import { ToastStack } from "./components/ToastStack";
+import { UpdateChecker } from "./components/UpdateChecker";
 import Today from "./views/Today";
 import Inbox from "./views/Inbox";
 import Upcoming from "./views/Upcoming";
@@ -152,6 +153,7 @@ export default function App() {
       <QuickAddModal />
       <TaskDetailDrawer />
       <ToastStack />
+      <UpdateChecker />
     </div>
   );
 }

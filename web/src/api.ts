@@ -28,6 +28,7 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   project_id: string | null;
+  project_color?: string | null;
   parent_id: string | null;
   is_inbox: number;
   estimate_minutes: number | null;
@@ -106,8 +107,19 @@ export const api = {
   calendar: {
     list: (params?: Record<string, string>) =>
       req<any[]>(`/calendar${params ? "?" + new URLSearchParams(params).toString() : ""}`),
-    create: (body: { title: string; startsAt: string; endsAt: string; taskId?: string; notes?: string }) =>
-      req<any>(`/calendar`, { method: "POST", body: JSON.stringify(body) }),
+    create: (body: {
+      title: string;
+      startsAt: string;
+      endsAt: string;
+      allDay?: boolean;
+      color?: string;
+      location?: string;
+      taskId?: string;
+      projectId?: string;
+      notes?: string;
+    }) => req<any>(`/calendar`, { method: "POST", body: JSON.stringify(body) }),
+    update: (id: string, body: Record<string, unknown>) =>
+      req<any>(`/calendar/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     remove: (id: string) => req<void>(`/calendar/${id}`, { method: "DELETE" }),
   },
   analytics: {

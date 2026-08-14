@@ -13,9 +13,12 @@ function tagsForTask(taskId: string) {
     .all(taskId);
 }
 
+const projectColorStmt = db.prepare("SELECT color FROM projects WHERE id = ?");
+
 function hydrate(task: any) {
   if (!task) return task;
-  return { ...task, tags: tagsForTask(task.id) };
+  const projectColor = task.project_id ? (projectColorStmt.get(task.project_id) as any)?.color ?? null : null;
+  return { ...task, tags: tagsForTask(task.id), project_color: projectColor };
 }
 
 // GET /api/tasks?view=today|inbox|upcoming|project&projectId=&status=&q=

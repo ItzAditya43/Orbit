@@ -14,6 +14,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -25,8 +27,9 @@ pub fn run() {
 
             let show = MenuItem::with_id(app, "show", "Open Orbit", true, None::<&str>)?;
             let quick_capture = MenuItem::with_id(app, "quick_capture", "Quick Capture", true, None::<&str>)?;
+            let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quick_capture, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &quick_capture, &check_updates, &quit])?;
 
             let _tray = TrayIconBuilder::new()
                 .menu(&menu)
@@ -41,6 +44,13 @@ pub fn run() {
                     "quick_capture" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.emit("quick-capture-requested", ());
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "check_updates" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.emit("check-for-updates-requested", ());
                             let _ = window.show();
                             let _ = window.set_focus();
                         }

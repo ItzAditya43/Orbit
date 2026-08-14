@@ -35,6 +35,7 @@ export function TaskRow({
   return (
     <div
       onClick={() => openDetail(task.id)}
+      style={task.project_color ? { borderLeftColor: task.project_color, borderLeftWidth: 3 } : undefined}
       className="group flex items-center gap-3 rounded-xl border border-neutral-200 dark:border-neutral-800 px-3 py-2.5 bg-white dark:bg-neutral-900 hover:border-neutral-300 dark:hover:border-neutral-700 hover:shadow-sm transition-all cursor-pointer"
     >
       <button
