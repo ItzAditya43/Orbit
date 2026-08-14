@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
@@ -9,6 +10,11 @@ export default function Search() {
   const { data: tasks = [], isFetching } = useQuery({
     queryKey: ["tasks", "search", q],
     queryFn: () => api.tasks.list({ q }),
+    enabled: q.trim().length > 0,
+  });
+  const { data: notes = [] } = useQuery({
+    queryKey: ["notes", "search", q],
+    queryFn: () => api.notes.list({ q }),
     enabled: q.trim().length > 0,
   });
 
@@ -22,6 +28,8 @@ export default function Search() {
     invalidate();
   };
 
+  const noResults = q && tasks.length === 0 && notes.length === 0 && !isFetching;
+
   return (
     <div className="max-w-2xl mx-auto p-8 space-y-6">
       <h1 className="text-xl font-semibold">Search</h1>
@@ -29,16 +37,37 @@ export default function Search() {
         autoFocus
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search tasks by title or notes..."
+        placeholder="Search tasks and notes..."
         className="w-full rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-sm outline-none"
       />
       {isFetching && <p className="text-sm text-neutral-400">Searching...</p>}
-      <div className="space-y-2">
-        {tasks.map((t) => (
-          <TaskRow key={t.id} task={t} onToggle={onToggle} onDelete={onDelete} />
-        ))}
-        {q && tasks.length === 0 && !isFetching && <p className="text-sm text-neutral-400">No matches.</p>}
-      </div>
+
+      {tasks.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-wide text-neutral-400">Tasks</p>
+          {tasks.map((t) => (
+            <TaskRow key={t.id} task={t} onToggle={onToggle} onDelete={onDelete} />
+          ))}
+        </div>
+      )}
+
+      {notes.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-wide text-neutral-400">Notes</p>
+          {notes.map((n: any) => (
+            <Link
+              key={n.id}
+              to="/notes"
+              className="block text-sm px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700"
+            >
+              <p className="font-medium">{n.title}</p>
+              {n.body && <p className="text-xs text-neutral-400 truncate mt-0.5">{n.body}</p>}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {noResults && <p className="text-sm text-neutral-400">No matches.</p>}
     </div>
   );
 }

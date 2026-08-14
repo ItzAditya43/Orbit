@@ -18,6 +18,8 @@ import {
   SearchIcon,
   MoonIcon,
   PlusIcon,
+  FilterIcon,
+  TrashIcon,
 } from "../icons";
 
 interface CommandItem {
@@ -54,7 +56,9 @@ export function CommandPalette() {
       { id: "nav-analytics", label: "Go to Analytics", icon: BarChartIcon, run: () => navigate("/analytics") },
       { id: "nav-review", label: "Go to Review", icon: BarChartIcon, run: () => navigate("/review") },
       { id: "nav-settings", label: "Go to Settings", icon: CompassIcon, run: () => navigate("/settings") },
+      { id: "nav-filters", label: "Go to Filters", icon: FilterIcon, run: () => navigate("/filters") },
       { id: "nav-search", label: "Go to Search", icon: SearchIcon, run: () => navigate("/search") },
+      { id: "nav-trash", label: "Go to Trash", icon: TrashIcon, run: () => navigate("/trash") },
       { id: "action-add-task", label: "Add a task", hint: "N", icon: PlusIcon, run: () => openQuickAdd() },
       { id: "action-theme", label: "Toggle dark / light mode", icon: MoonIcon, run: () => toggleTheme() },
     ],

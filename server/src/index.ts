@@ -18,6 +18,8 @@ import { syncRouter } from "./routes/sync.js";
 import { settingsRouter } from "./routes/settings.js";
 import { taskTemplatesRouter } from "./routes/taskTemplates.js";
 import { reviewRouter } from "./routes/review.js";
+import { filtersRouter } from "./routes/filters.js";
+import { startScheduler } from "./scheduler.js";
 
 const app = express();
 app.use(cors());
@@ -43,8 +45,10 @@ app.use("/api/sync", syncRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/task-templates", taskTemplatesRouter);
 app.use("/api/review", reviewRouter);
+app.use("/api/filters", filtersRouter);
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4310;
 app.listen(PORT, () => {
   console.log(`orbit server listening on http://localhost:${PORT}`);
+  startScheduler();
 });

@@ -10,10 +10,23 @@ projectsRouter.get("/", (_req, res) => {
       `SELECT p.*,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'open') AS open_task_count,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') AS done_task_count
-       FROM projects p WHERE p.is_archived = 0 ORDER BY p.created_at ASC`
+       FROM projects p WHERE p.is_archived = 0 AND p.deleted_at IS NULL ORDER BY p.created_at ASC`
     )
     .all();
   res.json(rows);
+});
+
+projectsRouter.get("/archived", (_req, res) => {
+  res.json(db.prepare("SELECT * FROM projects WHERE is_archived = 1 AND deleted_at IS NULL ORDER BY updated_at DESC").all());
+});
+
+projectsRouter.get("/trash", (_req, res) => {
+  res.json(db.prepare("SELECT * FROM projects WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all());
+});
+
+projectsRouter.post("/trash/empty", (_req, res) => {
+  const result = db.prepare("DELETE FROM projects WHERE deleted_at IS NOT NULL").run();
+  res.json({ ok: true, count: result.changes });
 });
 
 projectsRouter.post("/", (req, res) => {
@@ -46,7 +59,16 @@ projectsRouter.patch("/:id", (req, res) => {
   res.json(db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id));
 });
 
+projectsRouter.post("/:id/restore", (req, res) => {
+  db.prepare("UPDATE projects SET deleted_at = NULL, updated_at = ? WHERE id = ?").run(new Date().toISOString(), req.params.id);
+  res.json(db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id));
+});
+
 projectsRouter.delete("/:id", (req, res) => {
-  db.prepare("DELETE FROM projects WHERE id = ?").run(req.params.id);
+  if (req.query.permanent === "true") {
+    db.prepare("DELETE FROM projects WHERE id = ?").run(req.params.id);
+  } else {
+    db.prepare("UPDATE projects SET deleted_at = ? WHERE id = ?").run(new Date().toISOString(), req.params.id);
+  }
   res.status(204).end();
 });

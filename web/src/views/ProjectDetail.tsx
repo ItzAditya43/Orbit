@@ -14,12 +14,16 @@ const COLUMNS: { status: Task["status"]; label: string }[] = [
   { status: "done", label: "Done" },
 ];
 
+const PRIORITY_ORDER: Task["priority"][] = ["urgent", "high", "medium", "low", "none"];
+const PRIORITY_LABEL: Record<string, string> = { urgent: "Urgent", high: "High", medium: "Medium", low: "Low", none: "No priority" };
+
 export default function ProjectDetail() {
   const { id } = useParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const toast = useToastStore((s) => s.push);
   const [view, setView] = useState<"list" | "board">("list");
+  const [swimlanes, setSwimlanes] = useState(false);
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projects.list });
   const project = projects.find((p) => p.id === id);
   const { data: tasks = [], isLoading } = useQuery({
@@ -76,6 +80,14 @@ export default function ProjectDetail() {
               Board
             </button>
           </div>
+          {view === "board" && (
+            <button
+              onClick={() => setSwimlanes((s) => !s)}
+              className={`px-2 py-1 rounded-md ${swimlanes ? "bg-neutral-200 dark:bg-neutral-800" : "text-neutral-400"}`}
+            >
+              By priority
+            </button>
+          )}
           <button
             onClick={async () => {
               await api.projects.update(id!, { is_archived: 1 });
@@ -116,19 +128,39 @@ export default function ProjectDetail() {
               }}
             >
               <p className="text-xs uppercase tracking-wide text-neutral-400">{col.label}</p>
-              <div className="space-y-2 min-h-24 rounded-lg border border-dashed border-neutral-200 dark:border-neutral-800 p-2">
-                {tasks
-                  .filter((t) => t.status === col.status)
-                  .map((t) => (
-                    <div
-                      key={t.id}
-                      draggable
-                      onDragStart={(e) => e.dataTransfer.setData("text/task-id", t.id)}
-                      className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-2 py-1.5 text-sm cursor-move"
-                    >
-                      {t.title}
-                    </div>
-                  ))}
+              <div className="space-y-3 min-h-24 rounded-lg border border-dashed border-neutral-200 dark:border-neutral-800 p-2">
+                {swimlanes
+                  ? PRIORITY_ORDER.map((p) => {
+                      const cardsForLane = tasks.filter((t) => t.status === col.status && t.priority === p);
+                      if (cardsForLane.length === 0) return null;
+                      return (
+                        <div key={p} className="space-y-1.5">
+                          <p className="text-[10px] uppercase text-neutral-400">{PRIORITY_LABEL[p]}</p>
+                          {cardsForLane.map((t) => (
+                            <div
+                              key={t.id}
+                              draggable
+                              onDragStart={(e) => e.dataTransfer.setData("text/task-id", t.id)}
+                              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-2 py-1.5 text-sm cursor-move"
+                            >
+                              {t.title}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })
+                  : tasks
+                      .filter((t) => t.status === col.status)
+                      .map((t) => (
+                        <div
+                          key={t.id}
+                          draggable
+                          onDragStart={(e) => e.dataTransfer.setData("text/task-id", t.id)}
+                          className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-2 py-1.5 text-sm cursor-move"
+                        >
+                          {t.title}
+                        </div>
+                      ))}
               </div>
             </div>
           ))}

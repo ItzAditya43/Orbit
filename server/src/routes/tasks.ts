@@ -21,10 +21,20 @@ function hydrate(task: any) {
   return { ...task, tags: tagsForTask(task.id), project_color: projectColor };
 }
 
-// GET /api/tasks?view=today|inbox|upcoming|project&projectId=&status=&q=
+function getSetting(key: string, fallback: unknown) {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as any;
+  if (!row) return fallback;
+  try {
+    return JSON.parse(row.value);
+  } catch {
+    return fallback;
+  }
+}
+
+// GET /api/tasks?view=today|inbox|upcoming|project|stale&projectId=&status=&q=&priority=&tagId=&hasDueDate=
 tasksRouter.get("/", (req, res) => {
-  const { view, projectId, status, q } = req.query as Record<string, string | undefined>;
-  const clauses: string[] = [];
+  const { view, projectId, status, q, priority, tagId, hasDueDate } = req.query as Record<string, string | undefined>;
+  const clauses: string[] = ["deleted_at IS NULL"];
   const params: unknown[] = [];
 
   if (q) {
@@ -32,7 +42,7 @@ tasksRouter.get("/", (req, res) => {
       .prepare(
         `SELECT tasks.* FROM tasks_fts
          JOIN tasks ON tasks.rowid = tasks_fts.rowid
-         WHERE tasks_fts MATCH ? ORDER BY rank`
+         WHERE tasks_fts MATCH ? AND tasks.deleted_at IS NULL ORDER BY rank`
       )
       .all(q + "*");
     return res.json(rows.map(hydrate));
@@ -51,24 +61,94 @@ tasksRouter.get("/", (req, res) => {
   } else if (view === "project" && projectId) {
     clauses.push("project_id = ?");
     params.push(projectId);
+  } else if (view === "stale") {
+    const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
+    clauses.push("status = 'open'", "due_date IS NULL", "is_inbox = 0", "created_at < ?");
+    params.push(cutoff);
   }
 
   if (status) {
     clauses.push("status = ?");
     params.push(status);
   }
+  if (priority) {
+    clauses.push("priority = ?");
+    params.push(priority);
+  }
+  if (hasDueDate === "false") clauses.push("due_date IS NULL");
+  if (hasDueDate === "true") clauses.push("due_date IS NOT NULL");
+  if (tagId) {
+    clauses.push("id IN (SELECT task_id FROM task_tags WHERE tag_id = ?)");
+    params.push(tagId);
+  }
   clauses.push("parent_id IS NULL");
 
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const where = `WHERE ${clauses.join(" AND ")}`;
   const rows = db.prepare(`SELECT * FROM tasks ${where} ORDER BY order_index ASC, created_at ASC`).all(...params);
   res.json(rows.map(hydrate));
+});
+
+tasksRouter.get("/trash", (_req, res) => {
+  const rows = db.prepare("SELECT * FROM tasks WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all();
+  res.json(rows.map(hydrate));
+});
+
+tasksRouter.post("/trash/empty", (_req, res) => {
+  const result = db.prepare("DELETE FROM tasks WHERE deleted_at IS NOT NULL").run();
+  res.json({ ok: true, count: result.changes });
+});
+
+tasksRouter.get("/check-duplicate", (req, res) => {
+  const title = (req.query.title as string) ?? "";
+  if (!title.trim()) return res.json([]);
+  const normalized = title.trim().toLowerCase();
+  const rows = db
+    .prepare("SELECT id, title FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND lower(title) LIKE ?")
+    .all(`%${normalized}%`) as { id: string; title: string }[];
+  res.json(rows.filter((r) => r.title.toLowerCase() !== normalized).slice(0, 5));
+});
+
+// POST /api/tasks/auto-schedule { date } — slots today's un-timed open tasks sequentially
+// into working hours based on estimate_minutes (falls back to 30m when unset).
+tasksRouter.post("/auto-schedule", (req, res) => {
+  const date = (req.body?.date as string) ?? new Date().toISOString().slice(0, 10);
+  const startHM = getSetting("workingHoursStart", "09:00") as string;
+  const endHM = getSetting("workingHoursEnd", "17:00") as string;
+
+  const tasksToSchedule = db
+    .prepare(
+      `SELECT * FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND parent_id IS NULL
+       AND (due_date = ? OR scheduled_at LIKE ?) AND (scheduled_at IS NULL OR scheduled_at NOT LIKE '%T%')
+       ORDER BY CASE priority WHEN 'urgent' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END DESC, created_at ASC`
+    )
+    .all(date, `${date}%`) as any[];
+
+  const [startH, startM] = startHM.split(":").map(Number);
+  const [endH, endM] = endHM.split(":").map(Number);
+  let cursor = new Date(`${date}T00:00:00`);
+  cursor.setHours(startH, startM, 0, 0);
+  const endTime = new Date(`${date}T00:00:00`);
+  endTime.setHours(endH, endM, 0, 0);
+
+  const scheduled: any[] = [];
+  const now = new Date().toISOString();
+  for (const task of tasksToSchedule) {
+    const durationMin = task.estimate_minutes ?? 30;
+    const slotEnd = new Date(cursor.getTime() + durationMin * 60000);
+    if (slotEnd > endTime) break;
+    db.prepare("UPDATE tasks SET scheduled_at = ?, updated_at = ? WHERE id = ?").run(cursor.toISOString(), now, task.id);
+    scheduled.push({ id: task.id, title: task.title, scheduledAt: cursor.toISOString() });
+    cursor = slotEnd;
+  }
+
+  res.json({ scheduled, unscheduledCount: tasksToSchedule.length - scheduled.length });
 });
 
 tasksRouter.get("/:id", (req, res) => {
   const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
   if (!task) return res.status(404).json({ error: "not found" });
   const subtasks = db
-    .prepare("SELECT * FROM tasks WHERE parent_id = ? ORDER BY order_index ASC")
+    .prepare("SELECT * FROM tasks WHERE parent_id = ? AND deleted_at IS NULL ORDER BY order_index ASC")
     .all(req.params.id)
     .map(hydrate);
   res.json({ ...hydrate(task), subtasks });
@@ -87,14 +167,16 @@ tasksRouter.post("/", (req, res) => {
     estimateMinutes,
     isInbox,
     tagIds,
+    color,
+    energy,
   } = req.body ?? {};
   if (!title || typeof title !== "string") return res.status(400).json({ error: "title is required" });
 
   const id = randomUUID();
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO tasks (id, title, notes, project_id, parent_id, priority, due_date, start_date, scheduled_at, estimate_minutes, is_inbox, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO tasks (id, title, notes, project_id, parent_id, priority, due_date, start_date, scheduled_at, estimate_minutes, is_inbox, color, energy, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     id,
     title,
@@ -107,6 +189,8 @@ tasksRouter.post("/", (req, res) => {
     scheduledAt ?? null,
     estimateMinutes ?? null,
     isInbox ? 1 : 0,
+    color ?? null,
+    energy ?? null,
     now,
     now
   );
@@ -132,6 +216,8 @@ const PATCHABLE_FIELDS: Record<string, string> = {
   scheduledAt: "scheduled_at",
   orderIndex: "order_index",
   recurrence: "recurrence",
+  color: "color",
+  energy: "energy",
 };
 
 tasksRouter.patch("/:id", (req, res) => {
@@ -157,6 +243,19 @@ tasksRouter.patch("/:id", (req, res) => {
     const stmt = db.prepare("INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?,?)");
     for (const tagId of req.body.tagIds) stmt.run(req.params.id, tagId);
   }
+  res.json(hydrate(db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id)));
+});
+
+tasksRouter.post("/:id/snooze", (req, res) => {
+  const preset = (req.body?.preset as string) ?? "tomorrow";
+  const now = new Date();
+  const d = new Date();
+  if (preset === "tomorrow") d.setDate(now.getDate() + 1);
+  else if (preset === "in3days") d.setDate(now.getDate() + 3);
+  else if (preset === "nextWeek") d.setDate(now.getDate() + 7);
+  else if (preset === "nextMonth") d.setMonth(now.getMonth() + 1);
+  const dueDate = d.toISOString().slice(0, 10);
+  db.prepare("UPDATE tasks SET due_date = ?, updated_at = ? WHERE id = ?").run(dueDate, new Date().toISOString(), req.params.id);
   res.json(hydrate(db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id)));
 });
 
@@ -192,8 +291,17 @@ tasksRouter.post("/:id/reopen", (req, res) => {
   res.json(hydrate(db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id)));
 });
 
+tasksRouter.post("/:id/restore", (req, res) => {
+  db.prepare("UPDATE tasks SET deleted_at = NULL, updated_at = ? WHERE id = ?").run(new Date().toISOString(), req.params.id);
+  res.json(hydrate(db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id)));
+});
+
 tasksRouter.delete("/:id", (req, res) => {
-  db.prepare("DELETE FROM tasks WHERE id = ?").run(req.params.id);
+  if (req.query.permanent === "true") {
+    db.prepare("DELETE FROM tasks WHERE id = ?").run(req.params.id);
+  } else {
+    db.prepare("UPDATE tasks SET deleted_at = ? WHERE id = ?").run(new Date().toISOString(), req.params.id);
+  }
   res.status(204).end();
 });
 
@@ -244,7 +352,7 @@ tasksRouter.post("/bulk", (req, res) => {
       } else if (action === "reopen") {
         db.prepare("UPDATE tasks SET status = 'open', completed_at = NULL, updated_at = ? WHERE id = ?").run(now, id);
       } else if (action === "delete") {
-        db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+        db.prepare("UPDATE tasks SET deleted_at = ? WHERE id = ?").run(now, id);
       } else if (action === "move") {
         db.prepare("UPDATE tasks SET project_id = ?, updated_at = ? WHERE id = ?").run(projectId ?? null, now, id);
       } else if (action === "tag" && tagId) {

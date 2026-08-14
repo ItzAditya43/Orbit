@@ -25,6 +25,8 @@ import {
   BarChartIcon,
   SearchIcon,
   PlusIcon,
+  FilterIcon,
+  TrashIcon,
 } from "./icons";
 import Today from "./views/Today";
 import Inbox from "./views/Inbox";
@@ -43,6 +45,8 @@ import Boundaries from "./views/Boundaries";
 import Automations from "./views/Automations";
 import Settings from "./views/Settings";
 import Review from "./views/Review";
+import Filters from "./views/Filters";
+import Trash from "./views/Trash";
 
 const NAV_GROUPS = [
   {
@@ -72,7 +76,9 @@ const NAV_GROUPS = [
       { to: "/automations", label: "Automations", icon: ZapIcon },
       { to: "/analytics", label: "Analytics", icon: BarChartIcon },
       { to: "/review", label: "Review", icon: BarChartIcon },
+      { to: "/filters", label: "Filters", icon: FilterIcon },
       { to: "/search", label: "Search", icon: SearchIcon },
+      { to: "/trash", label: "Trash", icon: TrashIcon },
     ],
   },
 ];
@@ -185,6 +191,8 @@ export default function App() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/review" element={<Review />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/filters" element={<Filters />} />
+          <Route path="/trash" element={<Trash />} />
           <Route path="/search" element={<Search />} />
         </Routes>
         <AICommandBar />

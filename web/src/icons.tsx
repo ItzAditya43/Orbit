@@ -193,3 +193,9 @@ export const CircleCheckIcon = (p: IconProps) => (
     <path d="m8.5 12.3 2.4 2.4 4.6-5" />
   </svg>
 );
+
+export const FilterIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 5h16M7 12h10M10.5 19h3" />
+  </svg>
+);

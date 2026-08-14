@@ -6,6 +6,8 @@ import { PriorityPicker } from "./PriorityPicker";
 import { useToastStore } from "../toastStore";
 import { CheckIcon, XIcon } from "../icons";
 
+const COLORS = ["", "#f87171", "#fb923c", "#fbbf24", "#4ade80", "#22d3ee", "#818cf8", "#c084fc"];
+
 export function TaskDetailDrawer() {
   const { openTaskId, close } = useTaskDetailStore();
   const qc = useQueryClient();
@@ -16,6 +18,12 @@ export function TaskDetailDrawer() {
     enabled: !!openTaskId,
   });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projects.list });
+  const { data: dependencies } = useQuery({
+    queryKey: ["tasks", "dependencies", openTaskId],
+    queryFn: () => api.tasks.dependencies(openTaskId!),
+    enabled: !!openTaskId,
+  });
+  const { data: allTasks = [] } = useQuery({ queryKey: ["tasks", "status", "open"], queryFn: () => api.tasks.list({ status: "open" }) });
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -125,6 +133,43 @@ export function TaskDetailDrawer() {
                   ))}
                 </select>
               </label>
+              <label className="flex items-center gap-1.5 text-neutral-500">
+                Repeats
+                <select
+                  value={task.recurrence ?? "none"}
+                  onChange={(e) => patch({ recurrence: e.target.value === "none" ? null : e.target.value })}
+                  className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-0.5"
+                >
+                  <option value="none">Never</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-1.5 text-neutral-500">
+                Energy
+                <select
+                  value={task.energy ?? ""}
+                  onChange={(e) => patch({ energy: e.target.value || null })}
+                  className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-0.5"
+                >
+                  <option value="">—</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+              <div className="flex items-center gap-1">
+                {COLORS.map((c) => (
+                  <button
+                    key={c || "none"}
+                    onClick={() => patch({ color: c || null })}
+                    title={c || "No color"}
+                    className={`h-4 w-4 rounded-full border ${task.color === c || (!task.color && !c) ? "ring-2 ring-offset-1 ring-neutral-400 dark:ring-offset-neutral-900" : ""}`}
+                    style={{ background: c || "transparent", borderColor: c ? c : "#a3a3a3" }}
+                  />
+                ))}
+              </div>
             </div>
 
             <div className="pl-8">
@@ -187,6 +232,40 @@ export function TaskDetailDrawer() {
                   className="w-full text-sm bg-transparent outline-none text-neutral-500 placeholder:text-neutral-400 py-1"
                 />
               </form>
+            </div>
+
+            <div className="pl-8 space-y-1.5">
+              <p className="text-xs font-medium text-neutral-500">Blocked by</p>
+              {(dependencies?.blockedBy ?? []).map((d: any) => (
+                <div key={d.id} className="flex items-center gap-2 text-sm">
+                  <span className="flex-1 truncate">{d.title}</span>
+                  <button
+                    onClick={async () => {
+                      await api.tasks.removeDependency(openTaskId, d.id);
+                      qc.invalidateQueries({ queryKey: ["tasks", "dependencies", openTaskId] });
+                    }}
+                    className="text-neutral-400 hover:text-red-500"
+                  >
+                    <XIcon size={12} />
+                  </button>
+                </div>
+              ))}
+              <select
+                value=""
+                onChange={async (e) => {
+                  if (!e.target.value) return;
+                  await api.tasks.addDependency(openTaskId, e.target.value);
+                  qc.invalidateQueries({ queryKey: ["tasks", "dependencies", openTaskId] });
+                }}
+                className="text-xs text-neutral-400 bg-transparent outline-none flex items-center gap-1"
+              >
+                <option value="">+ Blocked by another task...</option>
+                {allTasks.filter((t) => t.id !== openTaskId).map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="pl-8 pt-4 border-t border-neutral-100 dark:border-neutral-800 flex items-center gap-3">

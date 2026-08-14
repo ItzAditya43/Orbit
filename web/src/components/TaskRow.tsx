@@ -4,6 +4,7 @@ import { useTaskDetailStore } from "../taskDetailStore";
 import { api } from "../api";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, TrashIcon } from "../icons";
+import { TaskContextMenu } from "./TaskContextMenu";
 
 function dueBadge(due: string | null) {
   if (!due) return null;
@@ -39,10 +40,13 @@ export function TaskRow({
     qc.invalidateQueries({ queryKey: ["tasks"] });
   };
 
+  const accentColor = task.color ?? task.project_color;
+
   return (
+    <TaskContextMenu task={task}>
     <div
       onClick={() => (selectMode ? onToggleSelect?.(task) : openDetail(task.id))}
-      style={task.project_color ? { borderLeftColor: task.project_color, borderLeftWidth: 3 } : undefined}
+      style={accentColor ? { borderLeftColor: accentColor, borderLeftWidth: 3 } : undefined}
       className={`group flex items-center gap-3 rounded-xl border px-3 py-2.5 bg-white dark:bg-neutral-900 hover:shadow-sm transition-all cursor-pointer ${
         selected ? "border-neutral-900 dark:border-white" : "border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700"
       }`}
@@ -89,6 +93,11 @@ export function TaskRow({
             ))}
           </div>
         )}
+        {task.energy && (
+          <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-500 capitalize">
+            {task.energy}
+          </span>
+        )}
         {badge && <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>}
         <button
           onClick={(e) => {
@@ -101,5 +110,6 @@ export function TaskRow({
         </button>
       </div>
     </div>
+    </TaskContextMenu>
   );
 }

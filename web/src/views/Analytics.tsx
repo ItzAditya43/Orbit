@@ -21,11 +21,47 @@ const RANGES = [
   { label: "90 days", days: 90 },
 ];
 
+function Heatmap({ completedByDay }: { completedByDay: { day: string; count: number }[] }) {
+  const countByDay = new Map(completedByDay.map((d) => [d.day, d.count]));
+  const days: string[] = [];
+  const today = new Date();
+  for (let i = 111; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  const max = Math.max(1, ...completedByDay.map((d) => d.count));
+  const shade = (count: number) => {
+    if (count === 0) return "bg-neutral-100 dark:bg-neutral-800";
+    const intensity = count / max;
+    if (intensity > 0.75) return "bg-emerald-600";
+    if (intensity > 0.5) return "bg-emerald-500";
+    if (intensity > 0.25) return "bg-emerald-400";
+    return "bg-emerald-300 dark:bg-emerald-700";
+  };
+  const weeks: string[][] = [];
+  for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+
+  return (
+    <div className="flex gap-1 overflow-x-auto pb-1">
+      {weeks.map((week, wi) => (
+        <div key={wi} className="flex flex-col gap-1">
+          {week.map((day) => (
+            <div key={day} title={`${day}: ${countByDay.get(day) ?? 0} completed`} className={`h-2.5 w-2.5 rounded-sm ${shade(countByDay.get(day) ?? 0)}`} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Analytics() {
   const [rangeDays, setRangeDays] = useState(14);
   const to = new Date().toISOString().slice(0, 10);
   const from = new Date(Date.now() - rangeDays * 86400000).toISOString().slice(0, 10);
   const { data, isLoading } = useQuery({ queryKey: ["analytics", from, to], queryFn: () => api.analytics.summary({ from, to }) });
+  const heatmapFrom = new Date(Date.now() - 112 * 86400000).toISOString().slice(0, 10);
+  const { data: heatmapData } = useQuery({ queryKey: ["analytics", "heatmap"], queryFn: () => api.analytics.summary({ from: heatmapFrom, to }) });
 
   if (isLoading || !data) return <div className="p-8 text-sm text-neutral-400">Loading...</div>;
 
@@ -64,6 +100,13 @@ export default function Analytics() {
           <p className="text-xs text-neutral-400">Overdue</p>
         </div>
       </div>
+
+      {heatmapData && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Completion activity (16 weeks)</p>
+          <Heatmap completedByDay={heatmapData.completedByDay} />
+        </div>
+      )}
 
       <div className="space-y-2">
         <p className="text-sm font-medium">Completed per day (last {rangeDays})</p>

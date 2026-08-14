@@ -220,6 +220,13 @@ CREATE TABLE IF NOT EXISTS goal_milestones (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS saved_filters (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  query_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
   title, notes, content='tasks', content_rowid='rowid'
 );
@@ -265,6 +272,18 @@ if (!eventColumnNames.has("color")) db.exec("ALTER TABLE calendar_events ADD COL
 if (!eventColumnNames.has("location")) db.exec("ALTER TABLE calendar_events ADD COLUMN location TEXT");
 if (!eventColumnNames.has("project_id")) db.exec("ALTER TABLE calendar_events ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL");
 if (!eventColumnNames.has("updated_at")) db.exec("ALTER TABLE calendar_events ADD COLUMN updated_at TEXT");
+
+const taskColumns = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+const taskColumnNames = new Set(taskColumns.map((c) => c.name));
+if (!taskColumnNames.has("deleted_at")) db.exec("ALTER TABLE tasks ADD COLUMN deleted_at TEXT");
+if (!taskColumnNames.has("color")) db.exec("ALTER TABLE tasks ADD COLUMN color TEXT");
+if (!taskColumnNames.has("energy")) db.exec("ALTER TABLE tasks ADD COLUMN energy TEXT");
+
+if (!notesColumnNames.has("deleted_at")) db.exec("ALTER TABLE notes ADD COLUMN deleted_at TEXT");
+
+const projectColumns = db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
+const projectColumnNames = new Set(projectColumns.map((c) => c.name));
+if (!projectColumnNames.has("deleted_at")) db.exec("ALTER TABLE projects ADD COLUMN deleted_at TEXT");
 
 // Backfill notes_fts for databases that had a `notes` table before the FTS index existed.
 const notesFtsCount = (db.prepare("SELECT COUNT(*) c FROM notes_fts").get() as any).c;

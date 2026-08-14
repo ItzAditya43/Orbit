@@ -38,6 +38,10 @@ export interface Task {
   scheduled_at: string | null;
   order_index: number;
   completed_at: string | null;
+  recurrence?: string | null;
+  deleted_at?: string | null;
+  color?: string | null;
+  energy?: "low" | "medium" | "high" | null;
   created_at: string;
   updated_at: string;
   tags: Tag[];
@@ -81,6 +85,19 @@ export const api = {
     convertToProject: (id: string) => req<Project>(`/tasks/${id}/convert-to-project`, { method: "POST" }),
     bulk: (body: { taskIds: string[]; action: "complete" | "reopen" | "delete" | "move" | "tag" | "priority"; projectId?: string; tagId?: string; priority?: Priority }) =>
       req<{ ok: boolean; count: number }>(`/tasks/bulk`, { method: "POST", body: JSON.stringify(body) }),
+    trash: () => req<Task[]>(`/tasks/trash`),
+    emptyTrash: () => req<{ ok: boolean; count: number }>(`/tasks/trash/empty`, { method: "POST" }),
+    restore: (id: string) => req<Task>(`/tasks/${id}/restore`, { method: "POST" }),
+    removePermanent: (id: string) => req<void>(`/tasks/${id}?permanent=true`, { method: "DELETE" }),
+    checkDuplicate: (title: string) => req<{ id: string; title: string }[]>(`/tasks/check-duplicate?title=${encodeURIComponent(title)}`),
+    snooze: (id: string, preset: "tomorrow" | "in3days" | "nextWeek" | "nextMonth") =>
+      req<Task>(`/tasks/${id}/snooze`, { method: "POST", body: JSON.stringify({ preset }) }),
+    autoSchedule: (date?: string) => req<{ scheduled: any[]; unscheduledCount: number }>(`/tasks/auto-schedule`, { method: "POST", body: JSON.stringify({ date }) }),
+    dependencies: (id: string) => req<{ blockedBy: Task[]; blocks: Task[] }>(`/tasks/${id}/dependencies`),
+    addDependency: (id: string, blocksTaskId: string) =>
+      req<{ ok: boolean }>(`/tasks/${id}/dependencies`, { method: "POST", body: JSON.stringify({ blocksTaskId }) }),
+    removeDependency: (id: string, blocksTaskId: string) =>
+      req<void>(`/tasks/${id}/dependencies/${blocksTaskId}`, { method: "DELETE" }),
   },
   taskTemplates: {
     list: () => req<any[]>(`/task-templates`),
@@ -97,6 +114,10 @@ export const api = {
     update: (id: string, body: Record<string, unknown>) =>
       req<Project>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     remove: (id: string) => req<void>(`/projects/${id}`, { method: "DELETE" }),
+    archived: () => req<Project[]>(`/projects/archived`),
+    trash: () => req<Project[]>(`/projects/trash`),
+    restore: (id: string) => req<Project>(`/projects/${id}/restore`, { method: "POST" }),
+    removePermanent: (id: string) => req<void>(`/projects/${id}?permanent=true`, { method: "DELETE" }),
   },
   tags: {
     list: () => req<Tag[]>(`/tags`),
@@ -186,6 +207,9 @@ export const api = {
       req<any>(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     remove: (id: string) => req<void>(`/notes/${id}`, { method: "DELETE" }),
     convertToTask: (id: string) => req<Task>(`/notes/${id}/convert-to-task`, { method: "POST" }),
+    trash: () => req<any[]>(`/notes/trash`),
+    restore: (id: string) => req<any>(`/notes/${id}/restore`, { method: "POST" }),
+    removePermanent: (id: string) => req<void>(`/notes/${id}?permanent=true`, { method: "DELETE" }),
   },
   automations: {
     list: () => req<any[]>(`/automations`),
@@ -216,5 +240,16 @@ export const api = {
   review: {
     daily: () => req<any>(`/review/daily`),
     weekly: () => req<any>(`/review/weekly`),
+  },
+  filters: {
+    list: () => req<any[]>(`/filters`),
+    create: (body: { name: string; query: Record<string, string> }) => req<any>(`/filters`, { method: "POST", body: JSON.stringify(body) }),
+    remove: (id: string) => req<void>(`/filters/${id}`, { method: "DELETE" }),
+  },
+  sync: {
+    backups: () => req<{ name: string; sizeBytes: number; createdAt: string }[]>(`/sync/backups`),
+    exportEncrypted: (passphrase: string) => req<any>(`/sync/export-encrypted`, { method: "POST", body: JSON.stringify({ passphrase }) }),
+    importEncrypted: (body: { passphrase: string; salt: string; iv: string; authTag: string; ciphertext: string }) =>
+      req<any>(`/sync/import-encrypted`, { method: "POST", body: JSON.stringify(body) }),
   },
 };

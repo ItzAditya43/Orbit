@@ -8,7 +8,24 @@ const LONG_BREAK_MINUTES = 15;
 const RADIUS = 90;
 const CIRC = 2 * Math.PI * RADIUS;
 
-type Phase = "idle" | "work" | "break" | "paused";
+type Phase = "idle" | "work" | "notes" | "break" | "paused";
+
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch {
+    // Web Audio unavailable — silently skip the cue rather than break the timer.
+  }
+}
 
 export default function Focus() {
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks", "today"], queryFn: () => api.tasks.list({ view: "today" }) });
@@ -21,8 +38,12 @@ export default function Focus() {
   const [secondsLeft, setSecondsLeft] = useState(workMinutes * 60);
   const [totalSeconds, setTotalSeconds] = useState(workMinutes * 60);
   const [completedInSitting, setCompletedInSitting] = useState(0);
+  const [sessionNotes, setSessionNotes] = useState("");
+  const [interruptions, setInterruptions] = useState(0);
+  const [zenMode, setZenMode] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
   const intervalRef = useRef<number | null>(null);
+  const pendingLongBreakRef = useRef(false);
 
   useEffect(() => {
     if (phase !== "work" && phase !== "break") return;
@@ -41,24 +62,46 @@ export default function Focus() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  async function handlePhaseComplete() {
+  // Away-detection: switching tabs/apps during a work session auto-pauses it and logs an
+  // interruption — an in-browser approximation of idle detection, no OS hooks needed.
+  useEffect(() => {
+    const handler = () => {
+      if (document.hidden && phase === "work") {
+        setInterruptions((n) => n + 1);
+        pause();
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  function handlePhaseComplete() {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    if (phase === "work" && sessionIdRef.current) {
-      await api.focusSessions.end(sessionIdRef.current, { wasCompleted: true });
-      sessionIdRef.current = null;
+    beep();
+    if (phase === "work") {
       const nextCount = completedInSitting + 1;
       setCompletedInSitting(nextCount);
-      const isLongBreak = nextCount % longBreakEvery === 0;
-      const breakMinutes = isLongBreak ? LONG_BREAK_MINUTES : SHORT_BREAK_MINUTES;
-      setPhase("break");
-      setSecondsLeft(breakMinutes * 60);
-      setTotalSeconds(breakMinutes * 60);
+      pendingLongBreakRef.current = nextCount % longBreakEvery === 0;
+      setPhase("notes");
     } else {
       setPhase("idle");
       setSecondsLeft(workMinutes * 60);
       setTotalSeconds(workMinutes * 60);
     }
   }
+
+  const finishNotesAndBreak = async () => {
+    if (sessionIdRef.current) {
+      await api.focusSessions.end(sessionIdRef.current, { wasCompleted: true, notes: sessionNotes || undefined });
+      sessionIdRef.current = null;
+    }
+    setSessionNotes("");
+    const breakMinutes = pendingLongBreakRef.current ? LONG_BREAK_MINUTES : SHORT_BREAK_MINUTES;
+    setPhase("break");
+    setSecondsLeft(breakMinutes * 60);
+    setTotalSeconds(breakMinutes * 60);
+  };
 
   const start = async () => {
     const session = await api.focusSessions.start({
@@ -67,6 +110,7 @@ export default function Focus() {
       plannedMinutes: workMinutes,
     });
     sessionIdRef.current = session.id;
+    setInterruptions(0);
     setPhase("work");
     setSecondsLeft(workMinutes * 60);
     setTotalSeconds(workMinutes * 60);
@@ -105,9 +149,16 @@ export default function Focus() {
   const todayStr = new Date().toISOString().slice(0, 10);
   const todaysSessions = sessions.filter((s: any) => s.was_completed && (s.started_at ?? "").slice(0, 10) === todayStr);
 
-  return (
+  const content = (
     <div className="max-w-md mx-auto p-8 flex flex-col items-center gap-6 pt-16">
-      <h1 className="text-xl font-semibold">Focus</h1>
+      <div className="w-full flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Focus</h1>
+        {phase !== "idle" && (
+          <button onClick={() => setZenMode((z) => !z)} className="text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
+            {zenMode ? "Exit distraction-free" : "Distraction-free"}
+          </button>
+        )}
+      </div>
 
       {phase === "idle" && (
         <div className="w-full space-y-3">
@@ -145,72 +196,98 @@ export default function Focus() {
         </div>
       )}
 
-      <div className="relative h-56 w-56">
-        <svg className="h-full w-full -rotate-90" viewBox="0 0 200 200">
-          <circle cx="100" cy="100" r={RADIUS} fill="none" stroke="currentColor" strokeWidth="8" className="text-neutral-100 dark:text-neutral-800" />
-          <circle
-            cx="100"
-            cy="100"
-            r={RADIUS}
-            fill="none"
-            stroke={ringColor}
-            strokeWidth="8"
-            strokeLinecap="round"
-            strokeDasharray={CIRC}
-            strokeDashoffset={CIRC * (1 - progress)}
-            className="transition-all duration-1000 ease-linear"
+      {phase === "notes" ? (
+        <div className="w-full space-y-3 py-10">
+          <p className="text-sm font-medium text-center">Session done — what did you get done?</p>
+          <textarea
+            autoFocus
+            value={sessionNotes}
+            onChange={(e) => setSessionNotes(e.target.value)}
+            placeholder="Optional notes..."
+            rows={3}
+            className="w-full rounded-lg border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm outline-none resize-none"
           />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-5xl font-mono tabular-nums">
-            {minutes}:{seconds}
-          </span>
-          <span className="text-xs text-neutral-400 capitalize mt-1">
-            {phase === "idle"
-              ? "Ready"
-              : phase === "paused"
-                ? "Paused"
-                : isBreak
-                  ? totalSeconds / 60 >= LONG_BREAK_MINUTES
-                    ? "Long break"
-                    : "Break"
-                  : "Focusing"}
-          </span>
+          <button
+            onClick={finishNotesAndBreak}
+            className="w-full px-4 py-2 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm font-medium"
+          >
+            Continue to break
+          </button>
         </div>
-      </div>
+      ) : (
+        <div className="relative h-56 w-56">
+          <svg className="h-full w-full -rotate-90" viewBox="0 0 200 200">
+            <circle cx="100" cy="100" r={RADIUS} fill="none" stroke="currentColor" strokeWidth="8" className="text-neutral-100 dark:text-neutral-800" />
+            <circle
+              cx="100"
+              cy="100"
+              r={RADIUS}
+              fill="none"
+              stroke={ringColor}
+              strokeWidth="8"
+              strokeLinecap="round"
+              strokeDasharray={CIRC}
+              strokeDashoffset={CIRC * (1 - progress)}
+              className="transition-all duration-1000 ease-linear"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-5xl font-mono tabular-nums">
+              {minutes}:{seconds}
+            </span>
+            <span className="text-xs text-neutral-400 capitalize mt-1">
+              {phase === "idle"
+                ? "Ready"
+                : phase === "paused"
+                  ? "Paused"
+                  : isBreak
+                    ? totalSeconds / 60 >= LONG_BREAK_MINUTES
+                      ? "Long break"
+                      : "Break"
+                    : "Focusing"}
+            </span>
+          </div>
+        </div>
+      )}
 
-      <div className="flex gap-3">
-        {phase === "idle" && (
-          <button onClick={start} className="px-5 py-2 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm font-medium">
-            Start
-          </button>
-        )}
-        {phase === "work" && (
-          <>
-            <button onClick={pause} className="px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 text-sm">
-              Pause
+      {phase !== "notes" && (
+        <div className="flex gap-3">
+          {phase === "idle" && (
+            <button onClick={start} className="px-5 py-2 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm font-medium">
+              Start
             </button>
-            <button onClick={stop} className="px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 text-sm text-red-500">
-              Stop
+          )}
+          {phase === "work" && (
+            <>
+              <button onClick={pause} className="px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 text-sm">
+                Pause
+              </button>
+              <button onClick={stop} className="px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 text-sm text-red-500">
+                Stop
+              </button>
+            </>
+          )}
+          {phase === "paused" && (
+            <>
+              <button onClick={resume} className="px-4 py-2 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm font-medium">
+                Resume
+              </button>
+              <button onClick={stop} className="px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 text-sm text-red-500">
+                Stop
+              </button>
+            </>
+          )}
+          {phase === "break" && (
+            <button onClick={skipBreak} className="px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 text-sm">
+              Skip break
             </button>
-          </>
-        )}
-        {phase === "paused" && (
-          <>
-            <button onClick={resume} className="px-4 py-2 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm font-medium">
-              Resume
-            </button>
-            <button onClick={stop} className="px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 text-sm text-red-500">
-              Stop
-            </button>
-          </>
-        )}
-        {phase === "break" && (
-          <button onClick={skipBreak} className="px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 text-sm">
-            Skip break
-          </button>
-        )}
-      </div>
+          )}
+        </div>
+      )}
+
+      {interruptions > 0 && phase !== "idle" && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">{interruptions} interruption{interruptions === 1 ? "" : "s"} this session</p>
+      )}
 
       <div className="w-full pt-4 border-t border-neutral-100 dark:border-neutral-800">
         <p className="text-xs text-neutral-400 mb-2">{todaysSessions.length} session{todaysSessions.length === 1 ? "" : "s"} completed today</p>
@@ -225,4 +302,9 @@ export default function Focus() {
       </div>
     </div>
   );
+
+  if (zenMode) {
+    return <div className="fixed inset-0 z-40 bg-white dark:bg-neutral-950 overflow-y-auto">{content}</div>;
+  }
+  return content;
 }

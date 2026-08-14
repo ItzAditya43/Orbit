@@ -14,10 +14,14 @@ export default function Settings() {
   const toast = useToastStore((s) => s.push);
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: api.settings.get });
   const { data: templates = [] } = useQuery({ queryKey: ["task-templates"], queryFn: api.taskTemplates.list });
+  const { data: backups = [] } = useQuery({ queryKey: ["sync", "backups"], queryFn: api.sync.backups });
   const [local, setLocal] = useState<any>(null);
   const [tplName, setTplName] = useState("");
   const [tplTitle, setTplTitle] = useState("");
   const [tplSubtasks, setTplSubtasks] = useState("");
+  const [exportPassphrase, setExportPassphrase] = useState("");
+  const [importPassphrase, setImportPassphrase] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (settings) setLocal(settings);
@@ -177,6 +181,91 @@ export default function Settings() {
               </button>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium">Backup & restore</h2>
+        <p className="text-xs text-neutral-400">
+          A full local backup is written automatically once a day (the last 14 are kept) at{" "}
+          <code>server/data/backups/</code>. You can also export/import an encrypted copy manually.
+        </p>
+        {backups.length > 0 && (
+          <div className="space-y-1">
+            {backups.slice(0, 5).map((b) => (
+              <div key={b.name} className="flex justify-between text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
+                <span>{b.name}</span>
+                <span className="text-neutral-400">{Math.round(b.sizeBytes / 1024)} KB</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 space-y-2">
+          <p className="text-xs font-medium">Export encrypted backup</p>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={exportPassphrase}
+              onChange={(e) => setExportPassphrase(e.target.value)}
+              placeholder="Passphrase"
+              className="flex-1 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-transparent px-2.5 py-1.5 text-sm outline-none"
+            />
+            <button
+              onClick={async () => {
+                if (exportPassphrase.length < 4) return toast("Passphrase must be at least 4 characters");
+                const data = await api.sync.exportEncrypted(exportPassphrase);
+                const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `orbit-backup-${new Date().toISOString().slice(0, 10)}.encrypted.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                setExportPassphrase("");
+                toast("Encrypted backup downloaded");
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-medium"
+            >
+              Export
+            </button>
+          </div>
+        </div>
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 space-y-2">
+          <p className="text-xs font-medium">Import encrypted backup</p>
+          <input
+            type="file"
+            accept="application/json"
+            onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+            className="text-xs text-neutral-400"
+          />
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={importPassphrase}
+              onChange={(e) => setImportPassphrase(e.target.value)}
+              placeholder="Passphrase"
+              className="flex-1 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-transparent px-2.5 py-1.5 text-sm outline-none"
+            />
+            <button
+              onClick={async () => {
+                if (!importFile || !importPassphrase) return;
+                const text = await importFile.text();
+                const parsed = JSON.parse(text);
+                try {
+                  await api.sync.importEncrypted({ passphrase: importPassphrase, salt: parsed.salt, iv: parsed.iv, authTag: parsed.authTag, ciphertext: parsed.ciphertext });
+                  qc.invalidateQueries();
+                  toast("Backup restored");
+                  setImportPassphrase("");
+                  setImportFile(null);
+                } catch {
+                  toast("Wrong passphrase or corrupted file");
+                }
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800 font-medium"
+            >
+              Import
+            </button>
+          </div>
         </div>
       </section>
     </div>
