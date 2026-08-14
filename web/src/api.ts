@@ -1,4 +1,16 @@
+import { useConnectionStore } from "./connectionStore";
+
 const BASE = "http://localhost:4310/api";
+
+export class ApiError extends Error {
+  isConnectionError: boolean;
+  status?: number;
+  constructor(message: string, opts: { isConnectionError: boolean; status?: number }) {
+    super(message);
+    this.isConnectionError = opts.isConnectionError;
+    this.status = opts.status;
+  }
+}
 
 export type Priority = "none" | "low" | "medium" | "high" | "urgent";
 export type TaskStatus = "open" | "in_progress" | "done" | "archived";
@@ -49,11 +61,30 @@ export interface Task {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-  });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    });
+  } catch {
+    // The local server is unreachable (not running, crashed, wrong port). This is the
+    // failure mode that otherwise looks like "the app just does nothing" — every button
+    // click silently swallowed a rejected promise with no feedback. Surface it globally.
+    useConnectionStore.getState().setConnected(false);
+    throw new ApiError("Can't reach the local server. Is it running?", { isConnectionError: true });
+  }
+  useConnectionStore.getState().setConnected(true);
+  if (!res.ok) {
+    const body = await res.text();
+    let message = body;
+    try {
+      message = JSON.parse(body).error ?? body;
+    } catch {
+      // body wasn't JSON — use as-is
+    }
+    throw new ApiError(message || `Request failed (${res.status})`, { isConnectionError: false, status: res.status });
+  }
   if (res.status === 204) return undefined as T;
   return res.json();
 }

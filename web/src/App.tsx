@@ -9,6 +9,8 @@ import { ToastStack } from "./components/ToastStack";
 import { UpdateChecker } from "./components/UpdateChecker";
 import { CommandPalette } from "./components/CommandPalette";
 import { NotificationCenter } from "./components/NotificationCenter";
+import { ConnectionBanner } from "./components/ConnectionBanner";
+import { GlobalErrorHandler } from "./components/GlobalErrorHandler";
 import {
   SunIcon,
   MoonIcon,
@@ -202,6 +204,8 @@ export default function App() {
       <ToastStack />
       <UpdateChecker />
       <CommandPalette />
+      <ConnectionBanner />
+      <GlobalErrorHandler />
     </div>
   );
 }
