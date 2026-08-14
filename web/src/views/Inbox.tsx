@@ -2,9 +2,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
 import { QuickAdd } from "../components/QuickAdd";
+import { EmptyState } from "../components/EmptyState";
+import { useToastStore } from "../toastStore";
 
 export default function Inbox() {
   const qc = useQueryClient();
+  const toast = useToastStore((s) => s.push);
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["tasks", "inbox"],
     queryFn: () => api.tasks.list({ view: "inbox" }),
@@ -31,6 +34,7 @@ export default function Inbox() {
   const process = async (task: Task, projectId: string) => {
     await api.tasks.update(task.id, { isInbox: false, projectId });
     invalidate();
+    toast(`Moved "${task.title}" to project`);
   };
 
   return (
@@ -63,7 +67,9 @@ export default function Inbox() {
             )}
           </div>
         ))}
-        {tasks.length === 0 && !isLoading && <p className="text-sm text-neutral-400">Inbox zero.</p>}
+        {tasks.length === 0 && !isLoading && (
+          <EmptyState icon="📥" title="Inbox zero" subtitle="Anything you capture without a date lands here — sort it into a project when you're ready." />
+        )}
       </div>
     </div>
   );

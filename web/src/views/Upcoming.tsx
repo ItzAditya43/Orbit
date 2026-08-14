@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
+import { EmptyState } from "../components/EmptyState";
 
 export default function Upcoming() {
   const qc = useQueryClient();
@@ -38,7 +39,9 @@ export default function Upcoming() {
           ))}
         </div>
       ))}
-      {tasks.length === 0 && !isLoading && <p className="text-sm text-neutral-400">Nothing scheduled ahead.</p>}
+      {tasks.length === 0 && !isLoading && (
+        <EmptyState icon="📅" title="Nothing scheduled ahead" subtitle="Tasks with a future due date will show up here, grouped by day." />
+      )}
     </div>
   );
 }

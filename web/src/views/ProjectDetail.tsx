@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
 import { QuickAdd } from "../components/QuickAdd";
+import { EmptyState } from "../components/EmptyState";
 
 const COLUMNS: { status: Task["status"]; label: string }[] = [
   { status: "open", label: "Open" },
@@ -79,7 +80,9 @@ export default function ProjectDetail() {
           {tasks.map((t) => (
             <TaskRow key={t.id} task={t} onToggle={onToggle} onDelete={onDelete} />
           ))}
-          {tasks.length === 0 && !isLoading && <p className="text-sm text-neutral-400">No tasks yet.</p>}
+          {tasks.length === 0 && !isLoading && (
+            <EmptyState icon="✅" title="No tasks yet" subtitle="Add the first task above to start tracking progress on this project." />
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-4">

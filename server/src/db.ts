@@ -140,6 +140,8 @@ CREATE TABLE IF NOT EXISTS notes (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   body TEXT,
+  color TEXT,
+  pinned INTEGER NOT NULL DEFAULT 0,
   project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
   task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL,
@@ -202,3 +204,10 @@ CREATE TRIGGER IF NOT EXISTS tasks_au AFTER UPDATE ON tasks BEGIN
   INSERT INTO tasks_fts(rowid, title, notes) VALUES (new.rowid, new.title, new.notes);
 END;
 `);
+
+// Lightweight migration for columns added after the initial CREATE TABLE — SQLite's
+// CREATE TABLE IF NOT EXISTS won't retrofit new columns onto an already-existing db file.
+const notesColumns = db.prepare("PRAGMA table_info(notes)").all() as { name: string }[];
+const notesColumnNames = new Set(notesColumns.map((c) => c.name));
+if (!notesColumnNames.has("color")) db.exec("ALTER TABLE notes ADD COLUMN color TEXT");
+if (!notesColumnNames.has("pinned")) db.exec("ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");

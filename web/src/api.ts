@@ -145,8 +145,8 @@ export const api = {
   notes: {
     list: (params?: Record<string, string>) =>
       req<any[]>(`/notes${params ? "?" + new URLSearchParams(params).toString() : ""}`),
-    create: (body: { title: string; body?: string }) => req<any>(`/notes`, { method: "POST", body: JSON.stringify(body) }),
-    update: (id: string, body: { title?: string; body?: string }) =>
+    create: (body: { title: string; body?: string; color?: string }) => req<any>(`/notes`, { method: "POST", body: JSON.stringify(body) }),
+    update: (id: string, body: { title?: string; body?: string; color?: string; pinned?: boolean }) =>
       req<any>(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     remove: (id: string) => req<void>(`/notes/${id}`, { method: "DELETE" }),
   },

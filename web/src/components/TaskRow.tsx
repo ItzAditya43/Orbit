@@ -1,59 +1,86 @@
 import type { Task } from "../api";
+import { PriorityPicker } from "./PriorityPicker";
+import { useTaskDetailStore } from "../taskDetailStore";
+import { api } from "../api";
+import { useQueryClient } from "@tanstack/react-query";
 
-const PRIORITY_COLORS: Record<string, string> = {
-  none: "bg-neutral-300 dark:bg-neutral-700",
-  low: "bg-sky-400",
-  medium: "bg-amber-400",
-  high: "bg-orange-500",
-  urgent: "bg-red-500",
-};
+function dueBadge(due: string | null) {
+  if (!due) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  if (due < today) return { label: "Overdue", cls: "bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400" };
+  if (due === today) return { label: "Today", cls: "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400" };
+  return { label: due.slice(5), cls: "bg-neutral-100 dark:bg-neutral-800 text-neutral-500" };
+}
 
 export function TaskRow({
   task,
   onToggle,
   onDelete,
-  onOpen,
 }: {
   task: Task;
   onToggle: (task: Task) => void;
   onDelete: (task: Task) => void;
-  onOpen?: (task: Task) => void;
 }) {
+  const qc = useQueryClient();
+  const openDetail = useTaskDetailStore((s) => s.open);
   const done = task.status === "done";
+  const badge = dueBadge(task.due_date);
+  const subtaskCount = task.subtasks?.length ?? 0;
+
+  const setPriority = async (p: Task["priority"]) => {
+    await api.tasks.update(task.id, { priority: p });
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+  };
+
   return (
-    <div className="group flex items-center gap-3 rounded-lg border border-neutral-200 dark:border-neutral-800 px-3 py-2 bg-white dark:bg-neutral-900 hover:border-neutral-300 dark:hover:border-neutral-700 transition-colors">
+    <div
+      onClick={() => openDetail(task.id)}
+      className="group flex items-center gap-3 rounded-xl border border-neutral-200 dark:border-neutral-800 px-3 py-2.5 bg-white dark:bg-neutral-900 hover:border-neutral-300 dark:hover:border-neutral-700 hover:shadow-sm transition-all cursor-pointer"
+    >
       <button
-        onClick={() => onToggle(task)}
-        className={`h-4 w-4 shrink-0 rounded-full border-2 ${
-          done ? "bg-emerald-500 border-emerald-500" : "border-neutral-400 dark:border-neutral-600"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle(task);
+        }}
+        className={`h-5 w-5 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors ${
+          done ? "bg-emerald-500 border-emerald-500" : "border-neutral-300 dark:border-neutral-600 hover:border-emerald-400"
         }`}
-        aria-label="toggle complete"
-      />
-      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${PRIORITY_COLORS[task.priority]}`} />
-      <button
-        className={`flex-1 text-left text-sm truncate ${done ? "line-through text-neutral-400" : ""}`}
-        onClick={() => onOpen?.(task)}
       >
-        {task.title}
+        {done && <span className="text-white text-[10px] animate-check-pop">✓</span>}
       </button>
-      {task.due_date && (
-        <span className="text-xs text-neutral-400 shrink-0">{task.due_date}</span>
-      )}
-      {task.tags.length > 0 && (
-        <div className="hidden sm:flex gap-1 shrink-0">
-          {task.tags.map((t) => (
-            <span key={t.id} className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
-              {t.name}
-            </span>
-          ))}
-        </div>
-      )}
-      <button
-        onClick={() => onDelete(task)}
-        className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 text-xs shrink-0"
-      >
-        delete
-      </button>
+
+      <PriorityPicker value={task.priority} onChange={setPriority} />
+
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm truncate ${done ? "line-through text-neutral-400" : ""}`}>{task.title}</p>
+      </div>
+
+      <div className="flex items-center gap-1.5 shrink-0">
+        {subtaskCount > 0 && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
+            {task.subtasks!.filter((s) => s.status === "done").length}/{subtaskCount}
+          </span>
+        )}
+        {task.tags.length > 0 && (
+          <div className="hidden sm:flex gap-1">
+            {task.tags.map((t) => (
+              <span key={t.id} className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
+                {t.name}
+              </span>
+            ))}
+          </div>
+        )}
+        {badge && <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(task);
+          }}
+          className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 text-xs px-1 transition-opacity"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   );
 }

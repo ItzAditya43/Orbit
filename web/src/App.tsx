@@ -1,7 +1,11 @@
 import { useEffect } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useUIStore } from "./store";
+import { useQuickAddStore } from "./quickAddStore";
 import { AICommandBar } from "./components/AICommandBar";
+import { QuickAddModal } from "./components/QuickAddModal";
+import { TaskDetailDrawer } from "./components/TaskDetailDrawer";
+import { ToastStack } from "./components/ToastStack";
 import Today from "./views/Today";
 import Inbox from "./views/Inbox";
 import Upcoming from "./views/Upcoming";
@@ -18,59 +22,111 @@ import Notes from "./views/Notes";
 import Boundaries from "./views/Boundaries";
 import Automations from "./views/Automations";
 
-const NAV = [
-  { to: "/", label: "Today", end: true },
-  { to: "/inbox", label: "Inbox" },
-  { to: "/upcoming", label: "Upcoming" },
-  { to: "/calendar", label: "Calendar" },
-  { to: "/projects", label: "Projects" },
-  { to: "/focus", label: "Focus" },
-  { to: "/time", label: "Time" },
-  { to: "/goals", label: "Goals" },
-  { to: "/habits", label: "Habits" },
-  { to: "/notes", label: "Notes" },
-  { to: "/boundaries", label: "Rigid" },
-  { to: "/automations", label: "Automations" },
-  { to: "/analytics", label: "Analytics" },
-  { to: "/search", label: "Search" },
+const NAV_GROUPS = [
+  {
+    label: "Plan",
+    items: [
+      { to: "/", label: "Today", icon: "☀️", end: true },
+      { to: "/inbox", label: "Inbox", icon: "📥" },
+      { to: "/upcoming", label: "Upcoming", icon: "📅" },
+      { to: "/calendar", label: "Calendar", icon: "🗓️" },
+      { to: "/projects", label: "Projects", icon: "📁" },
+    ],
+  },
+  {
+    label: "Do",
+    items: [
+      { to: "/focus", label: "Focus", icon: "🎯" },
+      { to: "/time", label: "Time", icon: "⏱️" },
+      { to: "/goals", label: "Goals", icon: "🚀" },
+      { to: "/habits", label: "Habits", icon: "🔁" },
+      { to: "/notes", label: "Notes", icon: "🗒️" },
+    ],
+  },
+  {
+    label: "Reflect",
+    items: [
+      { to: "/boundaries", label: "Rigid", icon: "🧭" },
+      { to: "/automations", label: "Automations", icon: "⚡" },
+      { to: "/analytics", label: "Analytics", icon: "📊" },
+      { to: "/search", label: "Search", icon: "🔎" },
+    ],
+  },
 ];
 
 export default function App() {
   const { theme, toggleTheme } = useUIStore();
+  const { open: openQuickAdd } = useQuickAddStore();
+  const location = useLocation();
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable;
+      if (!typing && e.key.toLowerCase() === "n" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        openQuickAdd();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [openQuickAdd]);
+
   return (
     <div className="flex h-screen">
-      <aside className="w-56 shrink-0 border-r border-neutral-200 dark:border-neutral-800 flex flex-col p-4 gap-1 overflow-y-auto">
-        <div className="flex items-center gap-2 mb-4 px-2">
-          <img src="/logo.png" alt="" className="h-5 w-5 rounded" />
-          <span className="text-sm font-semibold">Orbit</span>
+      <aside className="w-60 shrink-0 border-r border-neutral-200 dark:border-neutral-800 flex flex-col p-3 gap-4 overflow-y-auto bg-neutral-50/60 dark:bg-neutral-950/60">
+        <div className="flex items-center gap-2 px-2 pt-1">
+          <img src="/logo.png" alt="" className="h-6 w-6 rounded-md" />
+          <span className="text-sm font-semibold tracking-tight">Orbit</span>
         </div>
-        {NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              `px-2 py-1.5 rounded-md text-sm ${
-                isActive
-                  ? "bg-neutral-200 dark:bg-neutral-800 font-medium"
-                  : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-900"
-              }`
-            }
-          >
-            {item.label}
-          </NavLink>
-        ))}
-        <div className="flex-1" />
+
+        <button
+          onClick={openQuickAdd}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm font-medium shadow-sm hover:opacity-90 transition-opacity"
+        >
+          <span className="text-base leading-none">+</span> Quick add
+          <span className="ml-auto text-[10px] opacity-60 font-normal">N</span>
+        </button>
+
+        <nav className="flex-1 space-y-4">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label}>
+              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{group.label}</p>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = item.end ? location.pathname === item.to : location.pathname.startsWith(item.to);
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.end}
+                      className={`relative flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
+                        isActive
+                          ? "bg-white dark:bg-neutral-900 font-medium shadow-sm"
+                          : "text-neutral-600 dark:text-neutral-400 hover:bg-white/60 dark:hover:bg-neutral-900/60"
+                      }`}
+                    >
+                      {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-neutral-900 dark:bg-white" />}
+                      <span className="text-base leading-none">{item.icon}</span>
+                      {item.label}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+
         <button
           onClick={toggleTheme}
-          className="px-2 py-1.5 rounded-md text-sm text-left text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-900"
+          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm text-left text-neutral-500 hover:bg-white/60 dark:hover:bg-neutral-900/60"
         >
-          {theme === "dark" ? "☀ Light mode" : "☾ Dark mode"}
+          <span className="text-base leading-none">{theme === "dark" ? "☀️" : "🌙"}</span>
+          {theme === "dark" ? "Light mode" : "Dark mode"}
         </button>
       </aside>
       <main className="flex-1 overflow-y-auto relative">
@@ -93,6 +149,9 @@ export default function App() {
         </Routes>
         <AICommandBar />
       </main>
+      <QuickAddModal />
+      <TaskDetailDrawer />
+      <ToastStack />
     </div>
   );
 }
