@@ -62,6 +62,17 @@ async function runAction(actionType: string, config: any, ctx: TriggerContext) {
         body: JSON.stringify(ctx),
       }).catch(() => {});
     }
+  } else if (actionType === "reschedule" && ctx.taskId) {
+    const offsetDays = Number(config.offsetDays ?? 1);
+    const next = new Date();
+    next.setDate(next.getDate() + offsetDays);
+    db.prepare("UPDATE tasks SET due_date = ?, updated_at = ? WHERE id = ?").run(
+      next.toISOString().slice(0, 10),
+      now,
+      ctx.taskId
+    );
+  } else if (actionType === "start_timer" && ctx.taskId) {
+    db.prepare("INSERT INTO time_entries (id, task_id, started_at) VALUES (?,?,?)").run(randomUUID(), ctx.taskId, now);
   }
   // run_ai_workflow intentionally left as a stub — see server/src/routes/ai.ts for the
   // deterministic-fallback AI gateway this would delegate to.

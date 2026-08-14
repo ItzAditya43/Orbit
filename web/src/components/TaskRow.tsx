@@ -17,10 +17,16 @@ export function TaskRow({
   task,
   onToggle,
   onDelete,
+  selectMode,
+  selected,
+  onToggleSelect,
 }: {
   task: Task;
   onToggle: (task: Task) => void;
   onDelete: (task: Task) => void;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (task: Task) => void;
 }) {
   const qc = useQueryClient();
   const openDetail = useTaskDetailStore((s) => s.open);
@@ -35,10 +41,21 @@ export function TaskRow({
 
   return (
     <div
-      onClick={() => openDetail(task.id)}
+      onClick={() => (selectMode ? onToggleSelect?.(task) : openDetail(task.id))}
       style={task.project_color ? { borderLeftColor: task.project_color, borderLeftWidth: 3 } : undefined}
-      className="group flex items-center gap-3 rounded-xl border border-neutral-200 dark:border-neutral-800 px-3 py-2.5 bg-white dark:bg-neutral-900 hover:border-neutral-300 dark:hover:border-neutral-700 hover:shadow-sm transition-all cursor-pointer"
+      className={`group flex items-center gap-3 rounded-xl border px-3 py-2.5 bg-white dark:bg-neutral-900 hover:shadow-sm transition-all cursor-pointer ${
+        selected ? "border-neutral-900 dark:border-white" : "border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700"
+      }`}
     >
+      {selectMode && (
+        <span
+          className={`h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center ${
+            selected ? "bg-neutral-900 border-neutral-900 dark:bg-white dark:border-white" : "border-neutral-300 dark:border-neutral-600"
+          }`}
+        >
+          {selected && <CheckIcon size={10} className="text-white dark:text-neutral-900" strokeWidth={3} />}
+        </span>
+      )}
       <button
         onClick={(e) => {
           e.stopPropagation();

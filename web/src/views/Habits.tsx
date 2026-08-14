@@ -42,14 +42,16 @@ export default function Habits() {
             <div key={h.id} className="flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
               <div>
                 <p className="text-sm font-medium">{h.title}</p>
-                <p className="text-xs text-neutral-400">{h.logs?.length ?? 0} day streak (last 30d)</p>
+                <p className="text-xs text-neutral-400">
+                  {h.streak > 0 ? `${h.streak} day streak` : "No current streak"} · {h.totalCompletions} total
+                </p>
               </div>
               <button
                 onClick={async () => {
-                  await api.habits.log(h.id);
+                  if (doneToday) await api.habits.unlog(h.id);
+                  else await api.habits.log(h.id);
                   invalidate();
                 }}
-                disabled={doneToday}
                 className={`text-xs px-3 py-1.5 rounded-lg ${
                   doneToday ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600" : "border border-neutral-200 dark:border-neutral-800"
                 }`}

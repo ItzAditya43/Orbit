@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { api, type Priority } from "../api";
 import { useQuickAddStore } from "../quickAddStore";
 import { useToastStore } from "../toastStore";
@@ -12,7 +13,18 @@ export function QuickAddModal() {
   const [due, setDue] = useState<"" | "today" | "tomorrow">("");
   const qc = useQueryClient();
   const toast = useToastStore((s) => s.push);
+  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
+  const { data: templates = [] } = useQuery({ queryKey: ["task-templates"], queryFn: api.taskTemplates.list, enabled: isOpen });
+  const { data: boundaries = [] } = useQuery({ queryKey: ["boundaries"], queryFn: api.boundaries.list, enabled: isOpen });
+
+  const useTemplate = async (templateId: string) => {
+    if (!templateId) return;
+    await api.taskTemplates.instantiate(templateId);
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+    toast("Task created from template");
+    close();
+  };
 
   useEffect(() => {
     if (isOpen) setTimeout(() => inputRef.current?.focus(), 0);
@@ -42,10 +54,22 @@ export function QuickAddModal() {
 
   const submit = async () => {
     if (!title.trim()) return;
-    await api.tasks.create({ title: title.trim(), priority, dueDate, isInbox: !dueDate });
+    const t = title.trim();
+    await api.tasks.create({ title: t, priority, dueDate, isInbox: !dueDate });
     qc.invalidateQueries({ queryKey: ["tasks"] });
-    toast(`Added "${title.trim()}"`);
     close();
+
+    if (boundaries.length > 0) {
+      const scope = await api.boundaries.check(t);
+      if (!scope.inScope) {
+        toast(`"${t}" is outside your active Rigid boundaries`, {
+          actionLabel: "Review",
+          onAction: () => navigate("/boundaries"),
+        });
+        return;
+      }
+    }
+    toast(`Added "${t}"`);
   };
 
   return (
@@ -68,6 +92,22 @@ export function QuickAddModal() {
             placeholder="What do you need to do?"
             className="w-full text-base bg-transparent outline-none placeholder:text-neutral-400"
           />
+          {templates.length > 0 && (
+            <select
+              onChange={(e) => useTemplate(e.target.value)}
+              defaultValue=""
+              className="text-xs rounded-lg border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1 text-neutral-500 outline-none"
+            >
+              <option value="" disabled>
+                Or use a template...
+              </option>
+              {templates.map((t: any) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-1">
               {(["", "today", "tomorrow"] as const).map((d) => (

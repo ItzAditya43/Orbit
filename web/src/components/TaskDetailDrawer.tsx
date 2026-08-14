@@ -189,8 +189,29 @@ export function TaskDetailDrawer() {
               </form>
             </div>
 
-            <div className="pl-8 pt-4 border-t border-neutral-100 dark:border-neutral-800">
-              <button onClick={deleteTask} className="text-xs text-neutral-400 hover:text-red-500">
+            <div className="pl-8 pt-4 border-t border-neutral-100 dark:border-neutral-800 flex items-center gap-3">
+              <button
+                onClick={async () => {
+                  await api.tasks.duplicate(task.id);
+                  invalidate();
+                  toast("Task duplicated");
+                }}
+                className="text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+              >
+                Duplicate
+              </button>
+              <button
+                onClick={async () => {
+                  await api.tasks.convertToProject(task.id);
+                  close();
+                  invalidate();
+                  toast(`"${task.title}" converted to a project`);
+                }}
+                className="text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+              >
+                Convert to project
+              </button>
+              <button onClick={deleteTask} className="text-xs text-neutral-400 hover:text-red-500 ml-auto">
                 Delete task
               </button>
             </div>

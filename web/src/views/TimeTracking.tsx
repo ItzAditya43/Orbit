@@ -2,26 +2,78 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api";
 
+function toLocalInput(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function EntryRow({ entry, invalidate }: { entry: any; invalidate: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [start, setStart] = useState(toLocalInput(entry.started_at));
+  const [end, setEnd] = useState(entry.ended_at ? toLocalInput(entry.ended_at) : "");
+
+  const save = async () => {
+    await api.timeEntries.update(entry.id, {
+      startedAt: new Date(start).toISOString(),
+      endedAt: end ? new Date(end).toISOString() : undefined,
+    });
+    setEditing(false);
+    invalidate();
+  };
+
+  if (editing) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 text-sm px-3 py-2 rounded-lg border border-neutral-900 dark:border-white">
+        <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1 text-xs" />
+        <span className="text-neutral-400">to</span>
+        <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1 text-xs" />
+        <button onClick={save} className="ml-auto text-xs px-2 py-1 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900">
+          Save
+        </button>
+        <button onClick={() => setEditing(false)} className="text-xs px-2 py-1 rounded-md text-neutral-400">
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      className="w-full flex justify-between text-sm px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700 text-left"
+    >
+      <span>{new Date(entry.started_at).toLocaleString()}</span>
+      <span className="text-neutral-400">{entry.duration_seconds ? `${Math.round(entry.duration_seconds / 60)}m` : "running"}</span>
+    </button>
+  );
+}
+
 export default function TimeTracking() {
   const qc = useQueryClient();
   const [taskId, setTaskId] = useState("");
+  const [range, setRange] = useState<"week" | "month">("week");
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks", "today"], queryFn: () => api.tasks.list({ view: "today" }) });
   const { data: entries = [], isLoading } = useQuery({ queryKey: ["time-entries"], queryFn: () => api.timeEntries.list() });
+  const { data: summary } = useQuery({ queryKey: ["time-entries", "summary", range], queryFn: () => api.timeEntries.summary(range) });
 
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["time-entries"] });
   const running = entries.find((e: any) => !e.ended_at);
 
   const start = async () => {
     await api.timeEntries.start({ taskId: taskId || undefined });
-    qc.invalidateQueries({ queryKey: ["time-entries"] });
+    invalidate();
   };
   const stop = async (id: string) => {
     await api.timeEntries.stop(id);
-    qc.invalidateQueries({ queryKey: ["time-entries"] });
+    invalidate();
   };
 
   const totalToday = entries
     .filter((e: any) => (e.started_at ?? "").slice(0, 10) === new Date().toISOString().slice(0, 10))
     .reduce((sum: number, e: any) => sum + (e.duration_seconds ?? 0), 0);
+
+  const maxDaySeconds = Math.max(1, ...(summary?.days ?? []).map((d: any) => d.seconds));
 
   return (
     <div className="max-w-2xl mx-auto p-8 space-y-6">
@@ -52,13 +104,40 @@ export default function TimeTracking() {
         </button>
       )}
 
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium">Totals</p>
+          <div className="flex rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden text-xs">
+            {(["week", "month"] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`px-3 py-1 capitalize ${range === r ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900" : ""}`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+        {summary && <p className="text-xs text-neutral-400">{Math.round(summary.totalSeconds / 60)} minutes total this {range}</p>}
+        <div className="space-y-1">
+          {(summary?.days ?? []).map((d: any) => (
+            <div key={d.day} className="flex items-center gap-3 text-xs">
+              <span className="w-16 shrink-0 text-neutral-400">{d.day.slice(5)}</span>
+              <div className="flex-1 h-2.5 rounded bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+                <div className="h-full bg-neutral-900 dark:bg-neutral-100" style={{ width: `${Math.max(3, (d.seconds / maxDaySeconds) * 100)}%` }} />
+              </div>
+              <span className="w-10 text-right">{Math.round(d.seconds / 60)}m</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
       <div className="space-y-1">
+        <p className="text-sm font-medium">Recent entries</p>
         {entries.slice(0, 20).map((e: any) => (
-          <div key={e.id} className="flex justify-between text-sm px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <span>{new Date(e.started_at).toLocaleString()}</span>
-            <span className="text-neutral-400">{e.duration_seconds ? `${Math.round(e.duration_seconds / 60)}m` : "running"}</span>
-          </div>
+          <EntryRow key={e.id} entry={e} invalidate={invalidate} />
         ))}
       </div>
     </div>

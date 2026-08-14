@@ -194,9 +194,50 @@ CREATE TABLE IF NOT EXISTS api_tokens (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_templates (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  title TEXT NOT NULL,
+  notes TEXT,
+  priority TEXT NOT NULL DEFAULT 'none',
+  estimate_minutes INTEGER,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  subtasks_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS goal_milestones (
+  id TEXT PRIMARY KEY,
+  goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  is_done INTEGER NOT NULL DEFAULT 0,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
   title, notes, content='tasks', content_rowid='rowid'
 );
+
+CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+  title, body, content='notes', content_rowid='rowid'
+);
+
+CREATE TRIGGER IF NOT EXISTS notes_ai AFTER INSERT ON notes BEGIN
+  INSERT INTO notes_fts(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+END;
+CREATE TRIGGER IF NOT EXISTS notes_ad AFTER DELETE ON notes BEGIN
+  INSERT INTO notes_fts(notes_fts, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+END;
+CREATE TRIGGER IF NOT EXISTS notes_au AFTER UPDATE ON notes BEGIN
+  INSERT INTO notes_fts(notes_fts, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+  INSERT INTO notes_fts(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+END;
 
 CREATE TRIGGER IF NOT EXISTS tasks_ai AFTER INSERT ON tasks BEGIN
   INSERT INTO tasks_fts(rowid, title, notes) VALUES (new.rowid, new.title, new.notes);
@@ -224,3 +265,10 @@ if (!eventColumnNames.has("color")) db.exec("ALTER TABLE calendar_events ADD COL
 if (!eventColumnNames.has("location")) db.exec("ALTER TABLE calendar_events ADD COLUMN location TEXT");
 if (!eventColumnNames.has("project_id")) db.exec("ALTER TABLE calendar_events ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL");
 if (!eventColumnNames.has("updated_at")) db.exec("ALTER TABLE calendar_events ADD COLUMN updated_at TEXT");
+
+// Backfill notes_fts for databases that had a `notes` table before the FTS index existed.
+const notesFtsCount = (db.prepare("SELECT COUNT(*) c FROM notes_fts").get() as any).c;
+const notesCount = (db.prepare("SELECT COUNT(*) c FROM notes").get() as any).c;
+if (notesFtsCount === 0 && notesCount > 0) {
+  db.exec(`INSERT INTO notes_fts(rowid, title, body) SELECT rowid, title, body FROM notes`);
+}

@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
 
 const DURATIONS = [15, 25, 45, 60];
-const BREAK_MINUTES = 5;
+const SHORT_BREAK_MINUTES = 5;
+const LONG_BREAK_MINUTES = 15;
 const RADIUS = 90;
 const CIRC = 2 * Math.PI * RADIUS;
 
@@ -12,11 +13,14 @@ type Phase = "idle" | "work" | "break" | "paused";
 export default function Focus() {
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks", "today"], queryFn: () => api.tasks.list({ view: "today" }) });
   const { data: sessions = [] } = useQuery({ queryKey: ["focus-sessions"], queryFn: api.focusSessions.list });
+  const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: api.settings.get });
+  const longBreakEvery = settings?.pomodoroLongBreakEvery ?? 4;
   const [taskId, setTaskId] = useState<string>("");
   const [workMinutes, setWorkMinutes] = useState(25);
   const [phase, setPhase] = useState<Phase>("idle");
   const [secondsLeft, setSecondsLeft] = useState(workMinutes * 60);
   const [totalSeconds, setTotalSeconds] = useState(workMinutes * 60);
+  const [completedInSitting, setCompletedInSitting] = useState(0);
   const sessionIdRef = useRef<string | null>(null);
   const intervalRef = useRef<number | null>(null);
 
@@ -42,9 +46,13 @@ export default function Focus() {
     if (phase === "work" && sessionIdRef.current) {
       await api.focusSessions.end(sessionIdRef.current, { wasCompleted: true });
       sessionIdRef.current = null;
+      const nextCount = completedInSitting + 1;
+      setCompletedInSitting(nextCount);
+      const isLongBreak = nextCount % longBreakEvery === 0;
+      const breakMinutes = isLongBreak ? LONG_BREAK_MINUTES : SHORT_BREAK_MINUTES;
       setPhase("break");
-      setSecondsLeft(BREAK_MINUTES * 60);
-      setTotalSeconds(BREAK_MINUTES * 60);
+      setSecondsLeft(breakMinutes * 60);
+      setTotalSeconds(breakMinutes * 60);
     } else {
       setPhase("idle");
       setSecondsLeft(workMinutes * 60);
@@ -158,7 +166,15 @@ export default function Focus() {
             {minutes}:{seconds}
           </span>
           <span className="text-xs text-neutral-400 capitalize mt-1">
-            {phase === "idle" ? "Ready" : phase === "paused" ? "Paused" : isBreak ? "Break" : "Focusing"}
+            {phase === "idle"
+              ? "Ready"
+              : phase === "paused"
+                ? "Paused"
+                : isBreak
+                  ? totalSeconds / 60 >= LONG_BREAK_MINUTES
+                    ? "Long break"
+                    : "Break"
+                  : "Focusing"}
           </span>
         </div>
       </div>

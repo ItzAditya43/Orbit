@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
 import { QuickAdd } from "../components/QuickAdd";
 import { EmptyState } from "../components/EmptyState";
-import { CircleCheckIcon, ArrowLeftIcon } from "../icons";
+import { CircleCheckIcon, ArrowLeftIcon, TrashIcon } from "../icons";
+import { useToastStore } from "../toastStore";
 
 const COLUMNS: { status: Task["status"]; label: string }[] = [
   { status: "open", label: "Open" },
@@ -16,6 +17,8 @@ const COLUMNS: { status: Task["status"]; label: string }[] = [
 export default function ProjectDetail() {
   const { id } = useParams();
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const toast = useToastStore((s) => s.push);
   const [view, setView] = useState<"list" | "board">("list");
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projects.list });
   const project = projects.find((p) => p.id === id);
@@ -58,18 +61,32 @@ export default function ProjectDetail() {
           <span className="h-3 w-3 rounded-full" style={{ background: project?.color ?? "#999" }} />
           <h1 className="text-xl font-semibold">{project?.name ?? "Project"}</h1>
         </div>
-        <div className="flex gap-1 text-xs">
+        <div className="flex items-center gap-2 text-xs">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setView("list")}
+              className={`px-2 py-1 rounded-md ${view === "list" ? "bg-neutral-200 dark:bg-neutral-800" : "text-neutral-400"}`}
+            >
+              List
+            </button>
+            <button
+              onClick={() => setView("board")}
+              className={`px-2 py-1 rounded-md ${view === "board" ? "bg-neutral-200 dark:bg-neutral-800" : "text-neutral-400"}`}
+            >
+              Board
+            </button>
+          </div>
           <button
-            onClick={() => setView("list")}
-            className={`px-2 py-1 rounded-md ${view === "list" ? "bg-neutral-200 dark:bg-neutral-800" : "text-neutral-400"}`}
+            onClick={async () => {
+              await api.projects.update(id!, { is_archived: 1 });
+              qc.invalidateQueries({ queryKey: ["projects"] });
+              toast(`"${project?.name}" archived`);
+              navigate("/projects");
+            }}
+            title="Archive project"
+            className="text-neutral-400 hover:text-red-500 flex items-center gap-1"
           >
-            List
-          </button>
-          <button
-            onClick={() => setView("board")}
-            className={`px-2 py-1 rounded-md ${view === "board" ? "bg-neutral-200 dark:bg-neutral-800" : "text-neutral-400"}`}
-          >
-            Board
+            <TrashIcon size={13} /> Archive
           </button>
         </div>
       </div>

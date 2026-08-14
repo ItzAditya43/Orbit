@@ -32,7 +32,14 @@ automationsRouter.delete("/:id", (req, res) => {
 });
 
 automationsRouter.get("/runs", (_req, res) => {
-  res.json(db.prepare("SELECT * FROM automation_runs ORDER BY ran_at DESC LIMIT 100").all());
+  res.json(
+    db
+      .prepare(
+        `SELECT r.*, a.name AS automation_name FROM automation_runs r
+         JOIN automations a ON a.id = r.automation_id ORDER BY r.ran_at DESC LIMIT 100`
+      )
+      .all()
+  );
 });
 
 export const notificationsRouter = Router();
@@ -44,4 +51,32 @@ notificationsRouter.get("/", (_req, res) => {
 notificationsRouter.post("/:id/read", (req, res) => {
   db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
+});
+
+notificationsRouter.post("/read-all", (_req, res) => {
+  db.prepare("UPDATE notifications SET is_read = 1 WHERE is_read = 0").run();
+  res.json({ ok: true });
+});
+
+// Scans for due/overdue open tasks and creates a notification for each one not already
+// notified today. Meant to be polled by the client (no background scheduler exists yet).
+notificationsRouter.post("/check-due", (_req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const dueTasks = db
+    .prepare("SELECT id, title, due_date FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date <= ?")
+    .all(today) as { id: string; title: string; due_date: string }[];
+
+  const created: any[] = [];
+  for (const t of dueTasks) {
+    const isOverdue = t.due_date < today;
+    const message = `${isOverdue ? "Overdue" : "Due today"}: ${t.title}`;
+    const already = db
+      .prepare("SELECT id FROM notifications WHERE source = 'due-task' AND message = ? AND substr(created_at,1,10) = ?")
+      .get(message, today);
+    if (already) continue;
+    const id = randomUUID();
+    db.prepare("INSERT INTO notifications (id, message, source, created_at) VALUES (?,?,?,?)").run(id, message, "due-task", new Date().toISOString());
+    created.push({ id, message });
+  }
+  res.json({ created: created.length });
 });

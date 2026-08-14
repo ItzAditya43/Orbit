@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { api } from "../api";
 
 function Bar({ label, value, max }: { label: string; value: number; max: number }) {
@@ -14,8 +15,17 @@ function Bar({ label, value, max }: { label: string; value: number; max: number 
   );
 }
 
+const RANGES = [
+  { label: "14 days", days: 14 },
+  { label: "30 days", days: 30 },
+  { label: "90 days", days: 90 },
+];
+
 export default function Analytics() {
-  const { data, isLoading } = useQuery({ queryKey: ["analytics"], queryFn: api.analytics.summary });
+  const [rangeDays, setRangeDays] = useState(14);
+  const to = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.now() - rangeDays * 86400000).toISOString().slice(0, 10);
+  const { data, isLoading } = useQuery({ queryKey: ["analytics", from, to], queryFn: () => api.analytics.summary({ from, to }) });
 
   if (isLoading || !data) return <div className="p-8 text-sm text-neutral-400">Loading...</div>;
 
@@ -25,7 +35,20 @@ export default function Analytics() {
 
   return (
     <div className="max-w-2xl mx-auto p-8 space-y-8">
-      <h1 className="text-xl font-semibold">Analytics</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Analytics</h1>
+        <div className="flex rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden text-xs">
+          {RANGES.map((r) => (
+            <button
+              key={r.days}
+              onClick={() => setRangeDays(r.days)}
+              className={`px-3 py-1.5 ${rangeDays === r.days ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900" : "hover:bg-neutral-100 dark:hover:bg-neutral-800"}`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
@@ -43,7 +66,7 @@ export default function Analytics() {
       </div>
 
       <div className="space-y-2">
-        <p className="text-sm font-medium">Completed per day (last 14)</p>
+        <p className="text-sm font-medium">Completed per day (last {rangeDays})</p>
         {data.completedByDay.map((d: any) => (
           <Bar key={d.day} label={d.day.slice(5)} value={d.count} max={maxCompleted} />
         ))}

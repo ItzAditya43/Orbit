@@ -77,6 +77,18 @@ export const api = {
     complete: (id: string) => req<Task>(`/tasks/${id}/complete`, { method: "POST" }),
     reopen: (id: string) => req<Task>(`/tasks/${id}/reopen`, { method: "POST" }),
     remove: (id: string) => req<void>(`/tasks/${id}`, { method: "DELETE" }),
+    duplicate: (id: string) => req<Task>(`/tasks/${id}/duplicate`, { method: "POST" }),
+    convertToProject: (id: string) => req<Project>(`/tasks/${id}/convert-to-project`, { method: "POST" }),
+    bulk: (body: { taskIds: string[]; action: "complete" | "reopen" | "delete" | "move" | "tag" | "priority"; projectId?: string; tagId?: string; priority?: Priority }) =>
+      req<{ ok: boolean; count: number }>(`/tasks/bulk`, { method: "POST", body: JSON.stringify(body) }),
+  },
+  taskTemplates: {
+    list: () => req<any[]>(`/task-templates`),
+    create: (body: { name: string; title: string; notes?: string; priority?: Priority; estimateMinutes?: number; projectId?: string; subtasks?: string[] }) =>
+      req<any>(`/task-templates`, { method: "POST", body: JSON.stringify(body) }),
+    remove: (id: string) => req<void>(`/task-templates/${id}`, { method: "DELETE" }),
+    instantiate: (id: string, body?: { dueDate?: string }) =>
+      req<Task>(`/task-templates/${id}/instantiate`, { method: "POST", body: JSON.stringify(body ?? {}) }),
   },
   projects: {
     list: () => req<Project[]>(`/projects`),
@@ -103,6 +115,10 @@ export const api = {
     start: (body: { taskId?: string; projectId?: string }) =>
       req<any>(`/time-entries`, { method: "POST", body: JSON.stringify(body) }),
     stop: (id: string) => req<any>(`/time-entries/${id}/stop`, { method: "POST" }),
+    update: (id: string, body: { startedAt?: string; endedAt?: string }) =>
+      req<any>(`/time-entries/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    remove: (id: string) => req<void>(`/time-entries/${id}`, { method: "DELETE" }),
+    summary: (range: "week" | "month") => req<any>(`/time-entries/summary?range=${range}`),
   },
   calendar: {
     list: (params?: Record<string, string>) =>
@@ -123,7 +139,8 @@ export const api = {
     remove: (id: string) => req<void>(`/calendar/${id}`, { method: "DELETE" }),
   },
   analytics: {
-    summary: () => req<any>(`/analytics/summary`),
+    summary: (params?: { from?: string; to?: string }) =>
+      req<any>(`/analytics/summary${params?.from ? `?from=${params.from}&to=${params.to}` : ""}`),
   },
   boundaries: {
     list: () => req<any[]>(`/boundaries`),
@@ -146,12 +163,19 @@ export const api = {
     update: (id: string, body: Record<string, unknown>) =>
       req<any>(`/goals/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     remove: (id: string) => req<void>(`/goals/${id}`, { method: "DELETE" }),
+    addMilestone: (id: string, title: string) =>
+      req<any>(`/goals/${id}/milestones`, { method: "POST", body: JSON.stringify({ title }) }),
+    updateMilestone: (id: string, milestoneId: string, body: { isDone?: boolean; title?: string }) =>
+      req<any>(`/goals/${id}/milestones/${milestoneId}`, { method: "PATCH", body: JSON.stringify(body) }),
+    removeMilestone: (id: string, milestoneId: string) =>
+      req<any>(`/goals/${id}/milestones/${milestoneId}`, { method: "DELETE" }),
   },
   habits: {
     list: () => req<any[]>(`/habits`),
     create: (body: { title: string; frequency?: string }) =>
       req<any>(`/habits`, { method: "POST", body: JSON.stringify(body) }),
     log: (id: string) => req<any>(`/habits/${id}/log`, { method: "POST", body: JSON.stringify({}) }),
+    unlog: (id: string) => req<void>(`/habits/${id}/log`, { method: "DELETE", body: JSON.stringify({}) }),
     remove: (id: string) => req<void>(`/habits/${id}`, { method: "DELETE" }),
   },
   notes: {
@@ -161,6 +185,7 @@ export const api = {
     update: (id: string, body: { title?: string; body?: string; color?: string; pinned?: boolean }) =>
       req<any>(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     remove: (id: string) => req<void>(`/notes/${id}`, { method: "DELETE" }),
+    convertToTask: (id: string) => req<Task>(`/notes/${id}/convert-to-task`, { method: "POST" }),
   },
   automations: {
     list: () => req<any[]>(`/automations`),
@@ -174,9 +199,22 @@ export const api = {
   notifications: {
     list: () => req<any[]>(`/notifications`),
     markRead: (id: string) => req<any>(`/notifications/${id}/read`, { method: "POST" }),
+    markAllRead: () => req<any>(`/notifications/read-all`, { method: "POST" }),
+    checkDue: () => req<{ created: number }>(`/notifications/check-due`, { method: "POST" }),
   },
   ai: {
     status: () => req<any>(`/ai/status`),
     command: (text: string) => req<any>(`/ai/command`, { method: "POST", body: JSON.stringify({ text }) }),
+    pendingActions: () => req<any[]>(`/ai/actions?status=pending`),
+    approveAction: (id: string) => req<any>(`/ai/actions/${id}/approve`, { method: "POST" }),
+    rejectAction: (id: string) => req<any>(`/ai/actions/${id}/reject`, { method: "POST" }),
+  },
+  settings: {
+    get: () => req<any>(`/settings`),
+    update: (body: Record<string, unknown>) => req<any>(`/settings`, { method: "PATCH", body: JSON.stringify(body) }),
+  },
+  review: {
+    daily: () => req<any>(`/review/daily`),
+    weekly: () => req<any>(`/review/weekly`),
   },
 };

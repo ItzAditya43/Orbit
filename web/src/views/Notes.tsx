@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api";
 import { EmptyState } from "../components/EmptyState";
-import { NoteIcon, PinIcon } from "../icons";
+import { NoteIcon, PinIcon, SearchIcon, TargetIcon } from "../icons";
+import { useToastStore } from "../toastStore";
 
 const COLORS = [
   { name: "default", light: "bg-white dark:bg-neutral-900", swatch: "bg-white dark:bg-neutral-900 border" },
@@ -23,6 +24,7 @@ function NoteCard({ note, invalidate }: { note: any; invalidate: () => void }) {
   const [title, setTitle] = useState(note.title);
   const [body, setBody] = useState(note.body ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const toast = useToastStore((s) => s.push);
 
   const save = async () => {
     setEditing(false);
@@ -92,6 +94,18 @@ function NoteCard({ note, invalidate }: { note: any; invalidate: () => void }) {
           <button
             onClick={async (e) => {
               e.stopPropagation();
+              await api.notes.convertToTask(note.id);
+              invalidate();
+              toast(`"${note.title}" converted to a task`);
+            }}
+            title="Convert to task"
+            className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+          >
+            <TargetIcon size={13} />
+          </button>
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
               await api.notes.remove(note.id);
               invalidate();
             }}
@@ -125,7 +139,11 @@ function NoteCard({ note, invalidate }: { note: any; invalidate: () => void }) {
 
 export default function Notes() {
   const qc = useQueryClient();
-  const { data: notes = [], isLoading } = useQuery({ queryKey: ["notes"], queryFn: () => api.notes.list() });
+  const [search, setSearch] = useState("");
+  const { data: notes = [], isLoading } = useQuery({
+    queryKey: ["notes", search],
+    queryFn: () => api.notes.list(search.trim() ? { q: search.trim() } : undefined),
+  });
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -142,7 +160,18 @@ export default function Notes() {
 
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-6">
-      <h1 className="text-xl font-semibold">Notes</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-xl font-semibold">Notes</h1>
+        <div className="relative w-56">
+          <SearchIcon size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search notes..."
+            className="w-full pl-8 pr-2 py-1.5 text-xs rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 outline-none"
+          />
+        </div>
+      </div>
 
       <form
         onSubmit={(e) => {
@@ -189,7 +218,11 @@ export default function Notes() {
 
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
       {notes.length === 0 && !isLoading ? (
-        <EmptyState icon={NoteIcon} title="No notes yet" subtitle="Jot down an idea, meeting notes, or anything worth keeping." />
+        <EmptyState
+          icon={NoteIcon}
+          title={search ? "No matching notes" : "No notes yet"}
+          subtitle={search ? "Try a different search term." : "Jot down an idea, meeting notes, or anything worth keeping."}
+        />
       ) : (
         <div className="columns-1 sm:columns-2 md:columns-3 gap-3">
           {notes.map((n: any) => (

@@ -69,10 +69,66 @@ export const tools = {
     ).run(id, args.taskId ?? null, args.mode ?? "pomodoro", args.plannedMinutes ?? 25, now);
     return db.prepare("SELECT * FROM focus_sessions WHERE id = ?").get(id);
   },
+  update_task(args: { taskId: string; title?: string; notes?: string; priority?: string; dueDate?: string }) {
+    const updates: string[] = [];
+    const values: unknown[] = [];
+    if (args.title) { updates.push("title = ?"); values.push(args.title); }
+    if (args.notes !== undefined) { updates.push("notes = ?"); values.push(args.notes); }
+    if (args.priority) { updates.push("priority = ?"); values.push(args.priority); }
+    if (args.dueDate !== undefined) { updates.push("due_date = ?"); values.push(args.dueDate); }
+    if (updates.length) {
+      values.push(new Date().toISOString(), args.taskId);
+      db.prepare(`UPDATE tasks SET ${updates.join(", ")}, updated_at = ? WHERE id = ?`).run(...values);
+    }
+    return db.prepare("SELECT * FROM tasks WHERE id = ?").get(args.taskId);
+  },
+  delete_task(args: { taskId: string }) {
+    const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(args.taskId);
+    db.prepare("DELETE FROM tasks WHERE id = ?").run(args.taskId);
+    return task;
+  },
+  create_project(args: { name: string; color?: string; description?: string }) {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO projects (id, name, color, description, created_at, updated_at) VALUES (?,?,?,?,?,?)`).run(
+      id, args.name, args.color ?? null, args.description ?? null, now, now
+    );
+    return db.prepare("SELECT * FROM projects WHERE id = ?").get(id);
+  },
+  process_inbox(args: { taskId: string; projectId?: string } = {} as any) {
+    if (!args.taskId) {
+      return db.prepare("SELECT * FROM tasks WHERE is_inbox = 1 AND status = 'open'").all();
+    }
+    db.prepare("UPDATE tasks SET is_inbox = 0, project_id = ?, updated_at = ? WHERE id = ?").run(
+      args.projectId ?? null, new Date().toISOString(), args.taskId
+    );
+    return db.prepare("SELECT * FROM tasks WHERE id = ?").get(args.taskId);
+  },
+  search_notes(args: { query: string }) {
+    return db
+      .prepare(`SELECT notes.* FROM notes_fts JOIN notes ON notes.rowid = notes_fts.rowid WHERE notes_fts MATCH ? ORDER BY rank`)
+      .all(args.query + "*");
+  },
+  create_calendar_event(args: { title: string; startsAt: string; endsAt: string; allDay?: boolean }) {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO calendar_events (id, title, starts_at, ends_at, all_day, created_at, updated_at) VALUES (?,?,?,?,?,?,?)`
+    ).run(id, args.title, args.startsAt, args.endsAt, args.allDay ? 1 : 0, now, now);
+    return db.prepare("SELECT * FROM calendar_events WHERE id = ?").get(id);
+  },
+  add_dependency(args: { taskId: string; blocksTaskId: string }) {
+    db.prepare("INSERT OR IGNORE INTO task_dependencies (task_id, blocks_task_id) VALUES (?,?)").run(args.taskId, args.blocksTaskId);
+    return { ok: true };
+  },
 } as const;
 
 export type ToolName = keyof typeof tools;
 export const TOOL_NAMES = Object.keys(tools) as ToolName[];
+
+// Read-only tools never need approval regardless of AI permission mode. Everything else
+// mutates state, so it's gated by the "suggest" permission mode (see routes/ai.ts).
+export const READ_ONLY_TOOLS = new Set<ToolName>(["get_today", "get_tasks", "get_available_time", "search_notes"]);
 
 export function runTool(name: string, args: any) {
   const fn = (tools as any)[name];

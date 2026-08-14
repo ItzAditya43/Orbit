@@ -5,7 +5,18 @@ import { db } from "../db.js";
 export const notesRouter = Router();
 
 notesRouter.get("/", (req, res) => {
-  const { projectId, taskId } = req.query as Record<string, string | undefined>;
+  const { projectId, taskId, q } = req.query as Record<string, string | undefined>;
+
+  if (q) {
+    const rows = db
+      .prepare(
+        `SELECT notes.* FROM notes_fts JOIN notes ON notes.rowid = notes_fts.rowid
+         WHERE notes_fts MATCH ? ORDER BY rank`
+      )
+      .all(q + "*");
+    return res.json(rows);
+  }
+
   const clauses: string[] = [];
   const params: unknown[] = [];
   if (projectId) { clauses.push("project_id = ?"); params.push(projectId); }
@@ -36,4 +47,22 @@ notesRouter.patch("/:id", (req, res) => {
 notesRouter.delete("/:id", (req, res) => {
   db.prepare("DELETE FROM notes WHERE id = ?").run(req.params.id);
   res.status(204).end();
+});
+
+notesRouter.post("/:id/convert-to-task", (req, res) => {
+  const note: any = db.prepare("SELECT * FROM notes WHERE id = ?").get(req.params.id);
+  if (!note) return res.status(404).json({ error: "not found" });
+  const now = new Date().toISOString();
+  const id = randomUUID();
+  db.prepare(`INSERT INTO tasks (id, title, notes, project_id, is_inbox, created_at, updated_at) VALUES (?,?,?,?,?,?,?)`).run(
+    id,
+    note.title,
+    note.body,
+    note.project_id,
+    note.project_id ? 0 : 1,
+    now,
+    now
+  );
+  db.prepare("DELETE FROM notes WHERE id = ?").run(note.id);
+  res.status(201).json(db.prepare("SELECT * FROM tasks WHERE id = ?").get(id));
 });

@@ -15,6 +15,9 @@ import { notesRouter } from "./routes/notes.js";
 import { automationsRouter, notificationsRouter } from "./routes/automations.js";
 import { aiRouter } from "./routes/ai.js";
 import { syncRouter } from "./routes/sync.js";
+import { settingsRouter } from "./routes/settings.js";
+import { taskTemplatesRouter } from "./routes/taskTemplates.js";
+import { reviewRouter } from "./routes/review.js";
 
 const app = express();
 app.use(cors());
@@ -37,6 +40,9 @@ app.use("/api/automations", automationsRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/sync", syncRouter);
+app.use("/api/settings", settingsRouter);
+app.use("/api/task-templates", taskTemplatesRouter);
+app.use("/api/review", reviewRouter);
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4310;
 app.listen(PORT, () => {

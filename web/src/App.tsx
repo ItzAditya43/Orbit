@@ -7,6 +7,8 @@ import { QuickAddModal } from "./components/QuickAddModal";
 import { TaskDetailDrawer } from "./components/TaskDetailDrawer";
 import { ToastStack } from "./components/ToastStack";
 import { UpdateChecker } from "./components/UpdateChecker";
+import { CommandPalette } from "./components/CommandPalette";
+import { NotificationCenter } from "./components/NotificationCenter";
 import {
   SunIcon,
   MoonIcon,
@@ -39,6 +41,8 @@ import Habits from "./views/Habits";
 import Notes from "./views/Notes";
 import Boundaries from "./views/Boundaries";
 import Automations from "./views/Automations";
+import Settings from "./views/Settings";
+import Review from "./views/Review";
 
 const NAV_GROUPS = [
   {
@@ -67,6 +71,7 @@ const NAV_GROUPS = [
       { to: "/boundaries", label: "Rigid", icon: CompassIcon },
       { to: "/automations", label: "Automations", icon: ZapIcon },
       { to: "/analytics", label: "Analytics", icon: BarChartIcon },
+      { to: "/review", label: "Review", icon: BarChartIcon },
       { to: "/search", label: "Search", icon: SearchIcon },
     ],
   },
@@ -140,6 +145,20 @@ export default function App() {
           ))}
         </nav>
 
+        <NotificationCenter />
+
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            `flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-sm ${
+              isActive ? "bg-white dark:bg-neutral-900 font-medium shadow-sm" : "text-neutral-600 dark:text-neutral-400 hover:bg-white/60 dark:hover:bg-neutral-900/60"
+            }`
+          }
+        >
+          <CompassIcon size={16} className="text-neutral-400" />
+          Settings
+        </NavLink>
+
         <button
           onClick={toggleTheme}
           className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm text-left text-neutral-500 hover:bg-white/60 dark:hover:bg-neutral-900/60"
@@ -164,6 +183,8 @@ export default function App() {
           <Route path="/boundaries" element={<Boundaries />} />
           <Route path="/automations" element={<Automations />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/review" element={<Review />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/search" element={<Search />} />
         </Routes>
         <AICommandBar />
@@ -172,6 +193,7 @@ export default function App() {
       <TaskDetailDrawer />
       <ToastStack />
       <UpdateChecker />
+      <CommandPalette />
     </div>
   );
 }

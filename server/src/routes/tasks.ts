@@ -230,3 +230,61 @@ tasksRouter.delete("/:id/dependencies/:blocksTaskId", (req, res) => {
   );
   res.status(204).end();
 });
+
+// POST /api/tasks/bulk { taskIds: string[], action: "complete"|"reopen"|"delete"|"move"|"tag"|"priority", ...args }
+tasksRouter.post("/bulk", (req, res) => {
+  const { taskIds, action, projectId, tagId, priority } = req.body ?? {};
+  if (!Array.isArray(taskIds) || taskIds.length === 0) return res.status(400).json({ error: "taskIds required" });
+  const now = new Date().toISOString();
+
+  const run = db.transaction(() => {
+    for (const id of taskIds) {
+      if (action === "complete") {
+        db.prepare("UPDATE tasks SET status = 'done', completed_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
+      } else if (action === "reopen") {
+        db.prepare("UPDATE tasks SET status = 'open', completed_at = NULL, updated_at = ? WHERE id = ?").run(now, id);
+      } else if (action === "delete") {
+        db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+      } else if (action === "move") {
+        db.prepare("UPDATE tasks SET project_id = ?, updated_at = ? WHERE id = ?").run(projectId ?? null, now, id);
+      } else if (action === "tag" && tagId) {
+        db.prepare("INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?,?)").run(id, tagId);
+      } else if (action === "priority" && priority) {
+        db.prepare("UPDATE tasks SET priority = ?, updated_at = ? WHERE id = ?").run(priority, now, id);
+      }
+    }
+  });
+  run();
+
+  res.json({ ok: true, count: taskIds.length });
+});
+
+tasksRouter.post("/:id/duplicate", (req, res) => {
+  const task: any = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
+  if (!task) return res.status(404).json({ error: "not found" });
+  const now = new Date().toISOString();
+  const id = randomUUID();
+  db.prepare(
+    `INSERT INTO tasks (id, title, notes, project_id, priority, due_date, start_date, estimate_minutes, is_inbox, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(id, `${task.title} (copy)`, task.notes, task.project_id, task.priority, task.due_date, task.start_date, task.estimate_minutes, task.is_inbox, now, now);
+  res.status(201).json(hydrate(db.prepare("SELECT * FROM tasks WHERE id = ?").get(id)));
+});
+
+// Converts a task (and its subtasks) into a new project.
+tasksRouter.post("/:id/convert-to-project", (req, res) => {
+  const task: any = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
+  if (!task) return res.status(404).json({ error: "not found" });
+  const now = new Date().toISOString();
+  const projectId = randomUUID();
+  db.prepare(`INSERT INTO projects (id, name, description, created_at, updated_at) VALUES (?,?,?,?,?)`).run(
+    projectId,
+    task.title,
+    task.notes,
+    now,
+    now
+  );
+  db.prepare("UPDATE tasks SET project_id = ?, parent_id = NULL WHERE parent_id = ?").run(projectId, task.id);
+  db.prepare("DELETE FROM tasks WHERE id = ?").run(task.id);
+  res.status(201).json(db.prepare("SELECT * FROM projects WHERE id = ?").get(projectId));
+});

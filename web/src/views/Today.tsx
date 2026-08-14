@@ -1,8 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
 import { QuickAdd } from "../components/QuickAdd";
 import { EmptyState } from "../components/EmptyState";
+import { BulkActionBar } from "../components/BulkActionBar";
 import { SunIcon, CircleCheckIcon } from "../icons";
 import { useQuickAddStore } from "../quickAddStore";
 import { useToastStore } from "../toastStore";
@@ -24,8 +26,19 @@ export default function Today() {
     queryFn: () => api.tasks.list({ view: "today" }),
   });
   const { data: focusSessions = [] } = useQuery({ queryKey: ["focus-sessions"], queryFn: api.focusSessions.list });
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
+
+  const toggleSelect = (task: Task) => {
+    setSelectedIds((ids) => (ids.includes(task.id) ? ids.filter((i) => i !== task.id) : [...ids, task.id]));
+  };
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds([]);
+    invalidate();
+  };
 
   const onAdd = async (title: string) => {
     const today = new Date().toISOString().slice(0, 10);
@@ -90,9 +103,25 @@ export default function Today() {
       <QuickAdd onAdd={onAdd} placeholder="Add a task for today..." />
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
 
+      {open.length > 0 && (
+        <div className="flex justify-end">
+          <button onClick={() => setSelectMode((s) => !s)} className="text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
+            {selectMode ? "Done selecting" : "Select"}
+          </button>
+        </div>
+      )}
+
       <div className="space-y-2">
         {open.map((t) => (
-          <TaskRow key={t.id} task={t} onToggle={onToggle} onDelete={onDelete} />
+          <TaskRow
+            key={t.id}
+            task={t}
+            onToggle={onToggle}
+            onDelete={onDelete}
+            selectMode={selectMode}
+            selected={selectedIds.includes(t.id)}
+            onToggleSelect={toggleSelect}
+          />
         ))}
         {open.length === 0 && !isLoading && done.length === 0 && (
           <EmptyState
@@ -116,6 +145,8 @@ export default function Today() {
           ))}
         </div>
       )}
+
+      <BulkActionBar selectedIds={selectedIds} onDone={exitSelectMode} />
     </div>
   );
 }

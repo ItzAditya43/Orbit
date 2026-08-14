@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 
 export function AICommandBar() {
@@ -10,9 +10,15 @@ export function AICommandBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
 
+  const { data: pendingActions = [] } = useQuery({
+    queryKey: ["ai-actions", "pending"],
+    queryFn: api.ai.pendingActions,
+    refetchInterval: open ? 4000 : false,
+  });
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j") {
         e.preventDefault();
         setOpen((o) => !o);
       }
@@ -39,6 +45,12 @@ export function AICommandBar() {
     if (open) setTimeout(() => inputRef.current?.focus(), 0);
   }, [open]);
 
+  const invalidateAfterAction = () => {
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+    qc.invalidateQueries({ queryKey: ["focus-sessions"] });
+    qc.invalidateQueries({ queryKey: ["ai-actions"] });
+  };
+
   const send = async () => {
     if (!text.trim() || busy) return;
     const userText = text.trim();
@@ -48,8 +60,7 @@ export function AICommandBar() {
     try {
       const res = await api.ai.command(userText);
       setLog((l) => [...l, { role: "assistant", text: res.message ?? JSON.stringify(res.result) }]);
-      qc.invalidateQueries({ queryKey: ["tasks"] });
-      qc.invalidateQueries({ queryKey: ["focus-sessions"] });
+      invalidateAfterAction();
     } catch {
       setLog((l) => [...l, { role: "assistant", text: "Something went wrong reaching the AI gateway." }]);
     } finally {
@@ -63,7 +74,12 @@ export function AICommandBar() {
         onClick={() => setOpen(true)}
         className="fixed bottom-6 right-6 rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 px-4 py-2.5 text-sm shadow-lg"
       >
-        Ask / Command (⌘K)
+        Ask / Command (⌘J)
+        {pendingActions.length > 0 && (
+          <span className="ml-2 inline-flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-amber-400 text-neutral-900 text-[10px] font-medium">
+            {pendingActions.length}
+          </span>
+        )}
       </button>
     );
   }
@@ -74,6 +90,40 @@ export function AICommandBar() {
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-lg rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden"
       >
+        {pendingActions.length > 0 && (
+          <div className="border-b border-neutral-200 dark:border-neutral-800 p-3 space-y-2 bg-amber-50/60 dark:bg-amber-950/20">
+            <p className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
+              Waiting for approval — AI is set to "Suggest" mode in Settings
+            </p>
+            {pendingActions.map((a: any) => (
+              <div key={a.id} className="flex items-center justify-between gap-2 text-xs">
+                <span className="truncate">
+                  {a.tool_name.replace(/_/g, " ")}: {JSON.stringify(JSON.parse(a.args_json || "{}"))}
+                </span>
+                <div className="flex gap-1 shrink-0">
+                  <button
+                    onClick={async () => {
+                      await api.ai.approveAction(a.id);
+                      invalidateAfterAction();
+                    }}
+                    className="px-2 py-0.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await api.ai.rejectAction(a.id);
+                      invalidateAfterAction();
+                    }}
+                    className="px-2 py-0.5 rounded-md border border-neutral-200 dark:border-neutral-700"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="max-h-72 overflow-y-auto p-4 space-y-2">
           {log.length === 0 && (
             <p className="text-xs text-neutral-400">
