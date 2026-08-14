@@ -18,7 +18,9 @@ npm install
 npm run dev
 ```
 
-- API: http://localhost:4310 — Express + better-sqlite3, DB at `server/data/productivity.sqlite`
+- API: http://localhost:4310 — Express + better-sqlite3, DB at `~/.local/share/orbit/productivity.sqlite`
+  (falls back to `server/data/` on first run if that's where an existing dev DB already lives —
+  see `server/src/dataDir.ts`)
 - Web: http://localhost:5173 — React + Vite + Tailwind v4 + React Query + Zustand
 
 ## Run (Linux desktop app)
@@ -28,7 +30,15 @@ npm run dev:desktop
 ```
 
 Requires the Rust toolchain (`cargo`, `rustc`) and Linux desktop deps (webkit2gtk, gtk3).
-Prebuilt `.AppImage`/`.deb` are published on the [Releases page](https://github.com/ItzAditya43/Orbit/releases).
+Prebuilt `.AppImage`/`.deb`/`.rpm` are published on the [Releases page](https://github.com/ItzAditya43/Orbit/releases).
+
+**The packaged desktop app is self-contained** — it bundles the API server and starts it
+automatically on launch (and stops it on exit, including on SIGTERM/logout, not just the tray
+Quit item). You don't need `npm run dev:server` running separately to use a released build.
+If it detects something is already listening on port 4310 (e.g. you're also running the dev
+server), it leaves that alone instead of fighting over the port. See "Building a release" below
+for how that bundling works and its one real limitation (Node.js must be installed on the
+machine running it — this isn't a fully self-contained static binary).
 
 ## Run (CLI)
 
@@ -53,6 +63,29 @@ web/      React SPA (all views) + src-tauri/ (Linux desktop shell)
 cli/      Node CLI hitting the same API
 logo.png  App icon / brand mark, used as-is for the Tauri app icon and web favicon
 ```
+
+## Building a release (server bundling)
+
+`web/src-tauri/prepare-server-resource.sh` (run automatically by `tauri build`'s
+`beforeBuildCommand`) compiles `server/` to plain JS, stages it plus a production-only
+`npm install` at `web/src-tauri/resources/server-runtime/`, and prunes
+`better-sqlite3`'s prebuilt native binaries down to just `linux-x64.node` — it ships one
+for every OS/arch/libc combination by default, and the AppImage packaging tool
+(`linuxdeploy`) hard-errors trying to resolve the musl-libc build's dependencies on a
+glibc system with no musl installed. That's the whole reason the prune step exists.
+
+**Gotcha if you're debugging a stale-resources build**: Tauri caches an intermediate
+"installed tree" per bundle format under `src-tauri/target/release/bundle/` (e.g.
+`appimage_deb/`) and reuses it across bundle formats and rebuilds — editing
+`resources/server-runtime` and rerunning `tauri build --bundles appimage` alone can
+silently package the *previous* version of that folder. If a build looks like it's
+ignoring your resource changes, `rm -rf src-tauri/target/release/bundle` (and
+`target/release/resources` / `target/debug/resources`) before rebuilding.
+
+The server itself resolves its data directory the same way whether it's spawned by the
+desktop app or run directly (`ORBIT_DATA_DIR` env var, else `~/.local/share/orbit`) — see
+`server/src/dataDir.ts`. This is deliberately independent of Tauri's own per-identifier
+app-data convention so a dev checkout and the packaged app always share one database.
 
 ## Publishing an update
 

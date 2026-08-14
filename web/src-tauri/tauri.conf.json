@@ -1,12 +1,12 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Orbit",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "identifier": "dev.itzaditya43.orbit",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm run build && bash src-tauri/prepare-server-resource.sh"
   },
   "app": {
     "windows": [
@@ -26,6 +26,7 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "resources": ["resources/server-runtime"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -1,11 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { db } from "./db.js";
 import { fireTrigger } from "./automationEngine.js";
+import { dataDir } from "./dataDir.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const backupsDir = path.join(__dirname, "..", "data", "backups");
+export const backupsDir = path.join(dataDir, "backups");
 
 const TABLES = ["projects", "tags", "task_tags", "tasks", "task_dependencies", "calendar_events", "goals", "habits", "habit_logs", "notes"];
 
