@@ -17,6 +17,14 @@ export default function Search() {
     queryFn: () => api.notes.list({ q }),
     enabled: q.trim().length > 0,
   });
+  const { data: allHabits = [] } = useQuery({ queryKey: ["habits"], queryFn: api.habits.list });
+  const { data: allGoals = [] } = useQuery({ queryKey: ["goals"], queryFn: api.goals.list });
+  const { data: allProjects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projects.list });
+
+  const needle = q.trim().toLowerCase();
+  const habits = needle ? allHabits.filter((h: any) => h.title?.toLowerCase().includes(needle)) : [];
+  const goals = needle ? allGoals.filter((g: any) => g.title?.toLowerCase().includes(needle)) : [];
+  const projects = needle ? allProjects.filter((p: any) => p.name?.toLowerCase().includes(needle)) : [];
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
   const onToggle = async (task: Task) => {
@@ -28,7 +36,8 @@ export default function Search() {
     invalidate();
   };
 
-  const noResults = q && tasks.length === 0 && notes.length === 0 && !isFetching;
+  const noResults =
+    q && tasks.length === 0 && notes.length === 0 && habits.length === 0 && goals.length === 0 && projects.length === 0 && !isFetching;
 
   return (
     <div className="max-w-2xl mx-auto p-8 space-y-6">
@@ -37,7 +46,7 @@ export default function Search() {
         autoFocus
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search tasks and notes..."
+        placeholder="Search tasks, notes, habits, goals, projects..."
         className="w-full rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-sm outline-none"
       />
       {isFetching && <p className="text-sm text-neutral-400">Searching...</p>}
@@ -62,6 +71,51 @@ export default function Search() {
             >
               <p className="font-medium">{n.title}</p>
               {n.body && <p className="text-xs text-neutral-400 truncate mt-0.5">{n.body}</p>}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {habits.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-wide text-neutral-400">Habits</p>
+          {habits.map((h: any) => (
+            <Link
+              key={h.id}
+              to="/habits"
+              className="block text-sm px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700"
+            >
+              {h.title}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {goals.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-wide text-neutral-400">Goals</p>
+          {goals.map((g: any) => (
+            <Link
+              key={g.id}
+              to="/goals"
+              className="block text-sm px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700"
+            >
+              {g.title}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {projects.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-wide text-neutral-400">Projects</p>
+          {projects.map((p: any) => (
+            <Link
+              key={p.id}
+              to="/projects"
+              className="block text-sm px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700"
+            >
+              {p.name}
             </Link>
           ))}
         </div>
