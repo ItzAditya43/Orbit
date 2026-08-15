@@ -51,7 +51,7 @@ export function CommandPalette() {
       { id: "nav-goals", label: "Go to Goals", icon: RocketIcon, run: () => navigate("/goals") },
       { id: "nav-habits", label: "Go to Habits", icon: RepeatIcon, run: () => navigate("/habits") },
       { id: "nav-notes", label: "Go to Notes", icon: NoteIcon, run: () => navigate("/notes") },
-      { id: "nav-boundaries", label: "Go to Rigid", icon: CompassIcon, run: () => navigate("/boundaries") },
+      { id: "nav-boundaries", label: "Go to Priority", icon: CompassIcon, run: () => navigate("/boundaries") },
       { id: "nav-automations", label: "Go to Automations", icon: ZapIcon, run: () => navigate("/automations") },
       { id: "nav-analytics", label: "Go to Analytics", icon: BarChartIcon, run: () => navigate("/analytics") },
       { id: "nav-review", label: "Go to Review", icon: BarChartIcon, run: () => navigate("/review") },

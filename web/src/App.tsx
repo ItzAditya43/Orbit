@@ -74,7 +74,7 @@ const NAV_GROUPS = [
   {
     label: "Reflect",
     items: [
-      { to: "/boundaries", label: "Rigid", icon: CompassIcon },
+      { to: "/boundaries", label: "Priority", icon: CompassIcon },
       { to: "/automations", label: "Automations", icon: ZapIcon },
       { to: "/analytics", label: "Analytics", icon: BarChartIcon },
       { to: "/review", label: "Review", icon: BarChartIcon },

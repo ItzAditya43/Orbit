@@ -38,12 +38,15 @@ export default function Boundaries() {
   return (
     <div className="max-w-2xl mx-auto p-8 space-y-8">
       <div>
-        <h1 className="text-xl font-semibold">Rigid — Attention Boundaries</h1>
-        <p className="text-sm text-neutral-400">Capture curiosity without allowing it to hijack execution.</p>
+        <h1 className="text-xl font-semibold">Priority</h1>
+        <p className="text-sm text-neutral-400">
+          Define the areas you're actually committed to right now (below). When a new idea shows up, check it here —
+          if it doesn't match one of those areas, you can park it for later instead of chasing it immediately.
+        </p>
       </div>
 
       <div className="space-y-3">
-        <p className="text-sm font-medium">New idea / project — is it in scope?</p>
+        <p className="text-sm font-medium">Got a new idea? Check if it's actually a priority right now</p>
         <div className="flex gap-2">
           <input
             value={checkLabel}
@@ -77,7 +80,13 @@ export default function Boundaries() {
       </div>
 
       <div className="space-y-3">
-        <p className="text-sm font-medium">Active boundaries</p>
+        <div>
+          <p className="text-sm font-medium">Your priority areas</p>
+          <p className="text-xs text-neutral-400">
+            e.g. "main" for your job/studies, "hobby" for stuff you're actively doing for fun, "restricted" for
+            things you're deliberately avoiding right now. New ideas get checked against these.
+          </p>
+        </div>
         <div className="flex gap-2">
           <select
             value={category}

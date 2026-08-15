@@ -83,7 +83,7 @@ export function QuickAddModal() {
     if (boundaries.length === 0) return;
     const scope = await api.boundaries.check(t);
     if (!scope.inScope) {
-      toast(`"${t}" is outside your active Rigid boundaries`, {
+      toast(`"${t}" is outside your active Priority boundaries`, {
         actionLabel: "Review",
         onAction: () => navigate("/boundaries"),
       });

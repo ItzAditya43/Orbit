@@ -22,6 +22,11 @@ function EntryRow({ entry, invalidate }: { entry: any; invalidate: () => void })
     invalidate();
   };
 
+  const remove = async () => {
+    await api.timeEntries.remove(entry.id);
+    invalidate();
+  };
+
   if (editing) {
     return (
       <div className="flex flex-wrap items-center gap-2 text-sm px-3 py-2 rounded-lg border border-neutral-900 dark:border-white">
@@ -34,18 +39,23 @@ function EntryRow({ entry, invalidate }: { entry: any; invalidate: () => void })
         <button onClick={() => setEditing(false)} className="text-xs px-2 py-1 rounded-md text-neutral-400">
           Cancel
         </button>
+        <button onClick={remove} className="text-xs px-2 py-1 rounded-md text-red-500 hover:text-red-600">
+          Delete
+        </button>
       </div>
     );
   }
 
   return (
-    <button
-      onClick={() => setEditing(true)}
-      className="w-full flex justify-between text-sm px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700 text-left"
-    >
-      <span>{new Date(entry.started_at).toLocaleString()}</span>
-      <span className="text-neutral-400">{entry.duration_seconds ? `${Math.round(entry.duration_seconds / 60)}m` : "running"}</span>
-    </button>
+    <div className="w-full flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700">
+      <button onClick={() => setEditing(true)} className="flex-1 flex justify-between text-left">
+        <span>{new Date(entry.started_at).toLocaleString()}</span>
+        <span className="text-neutral-400">{entry.duration_seconds ? `${Math.round(entry.duration_seconds / 60)}m` : "running"}</span>
+      </button>
+      <button onClick={remove} className="text-neutral-400 hover:text-red-500 text-xs shrink-0">
+        remove
+      </button>
+    </div>
   );
 }
 
