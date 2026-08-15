@@ -44,5 +44,65 @@ analyticsRouter.get("/summary", (req, res) => {
     )
     .all();
 
-  res.json({ totalOpen, totalDone, overdue, estimateVsActual, completedByDay, focusMinutesByDay, projectVelocity, rangeDays: days });
+  // Habits: per-habit streak + completions in range, plus an overall today-completion rate.
+  const habitRows = db.prepare("SELECT id, title FROM habits").all() as { id: string; title: string }[];
+  const habitStats = habitRows.map((h) => {
+    const logs = db.prepare("SELECT date FROM habit_logs WHERE habit_id = ? ORDER BY date DESC LIMIT 90").all(h.id) as { date: string }[];
+    const dates = logs.map((l) => l.date);
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    let streak = 0;
+    if (dates.length && (dates[0] === today || dates[0] === yesterday)) {
+      streak = 1;
+      const cursor = new Date(dates[0]);
+      for (let i = 1; i < dates.length; i++) {
+        cursor.setDate(cursor.getDate() - 1);
+        if (dates[i] === cursor.toISOString().slice(0, 10)) streak++;
+        else break;
+      }
+    }
+    const inRange = dates.filter((d) => (!from || d >= from) && (!to || d <= to)).length;
+    return { id: h.id, title: h.title, streak, completedToday: dates[0] === today, totalCompletions: dates.length, completionsInRange: inRange };
+  });
+  const habitsCompletedToday = habitStats.filter((h) => h.completedToday).length;
+
+  // Goals: overall progress + breakdown by horizon.
+  const goalRows = db.prepare("SELECT horizon, status, progress FROM goals WHERE status != 'abandoned'").all() as any[];
+  const goalsActive = goalRows.filter((g) => g.status === "active").length;
+  const goalsDone = goalRows.filter((g) => g.status === "done").length;
+  const avgGoalProgress = goalRows.length ? goalRows.reduce((s, g) => s + (g.progress ?? 0), 0) / goalRows.length : 0;
+  const goalsByHorizon = Object.entries(
+    goalRows.reduce((acc: Record<string, number>, g) => ((acc[g.horizon] = (acc[g.horizon] ?? 0) + 1), acc), {})
+  ).map(([horizon, count]) => ({ horizon, count }));
+
+  const totalNotes = (db.prepare("SELECT COUNT(*) c FROM notes").get() as any).c;
+
+  const timeTrackedMinutes = (
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(duration_seconds), 0) / 60.0 AS minutes FROM time_entries
+         WHERE ended_at IS NOT NULL ${from ? "AND started_at >= ?" : ""} ${to ? "AND started_at <= ?" : ""}`
+      )
+      .get(...[from, to].filter(Boolean)) as any
+  ).minutes;
+
+  const upcomingEvents = (
+    db.prepare("SELECT COUNT(*) c FROM calendar_events WHERE starts_at >= datetime('now')").get() as any
+  ).c;
+
+  res.json({
+    totalOpen,
+    totalDone,
+    overdue,
+    estimateVsActual,
+    completedByDay,
+    focusMinutesByDay,
+    projectVelocity,
+    rangeDays: days,
+    habits: { total: habitRows.length, completedToday: habitsCompletedToday, stats: habitStats },
+    goals: { active: goalsActive, done: goalsDone, avgProgress: avgGoalProgress, byHorizon: goalsByHorizon },
+    notes: { total: totalNotes },
+    timeTrackedMinutes,
+    upcomingEvents,
+  });
 });

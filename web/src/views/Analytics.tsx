@@ -99,6 +99,30 @@ export default function Analytics() {
           <p className="text-2xl font-semibold">{data.overdue}</p>
           <p className="text-xs text-neutral-400">Overdue</p>
         </div>
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
+          <p className="text-2xl font-semibold">
+            {data.habits.completedToday}/{data.habits.total}
+          </p>
+          <p className="text-xs text-neutral-400">Habits done today</p>
+        </div>
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
+          <p className="text-2xl font-semibold">{Math.round(data.goals.avgProgress)}%</p>
+          <p className="text-xs text-neutral-400">
+            Avg goal progress ({data.goals.active} active, {data.goals.done} done)
+          </p>
+        </div>
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
+          <p className="text-2xl font-semibold">{Math.round(data.timeTrackedMinutes)}m</p>
+          <p className="text-xs text-neutral-400">Time tracked (range)</p>
+        </div>
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
+          <p className="text-2xl font-semibold">{data.notes.total}</p>
+          <p className="text-xs text-neutral-400">Notes</p>
+        </div>
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
+          <p className="text-2xl font-semibold">{data.upcomingEvents}</p>
+          <p className="text-xs text-neutral-400">Upcoming events</p>
+        </div>
       </div>
 
       {heatmapData && (
@@ -130,6 +154,27 @@ export default function Analytics() {
           <Bar key={p.name} label={p.name} value={p.completed_count} max={maxVelocity} />
         ))}
         {data.projectVelocity.length === 0 && <p className="text-xs text-neutral-400">No completed project tasks yet.</p>}
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Habit streaks</p>
+        {data.habits.stats.map((h: any) => (
+          <div key={h.id} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <span>{h.title}</span>
+            <span className="text-neutral-400">
+              {h.streak} day streak · {h.totalCompletions} total · {h.completionsInRange} in range
+            </span>
+          </div>
+        ))}
+        {data.habits.stats.length === 0 && <p className="text-xs text-neutral-400">No habits yet.</p>}
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Goals by horizon</p>
+        {data.goals.byHorizon.map((g: any) => (
+          <Bar key={g.horizon} label={g.horizon} value={g.count} max={Math.max(1, ...data.goals.byHorizon.map((x: any) => x.count))} />
+        ))}
+        {data.goals.byHorizon.length === 0 && <p className="text-xs text-neutral-400">No goals yet.</p>}
       </div>
     </div>
   );
