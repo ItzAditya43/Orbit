@@ -176,6 +176,23 @@ export default function Analytics() {
         ))}
         {data.goals.byHorizon.length === 0 && <p className="text-xs text-neutral-400">No goals yet.</p>}
       </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Mood & energy (last {rangeDays})</p>
+        {data.checkins.length > 0 ? (
+          <div className="space-y-1">
+            {data.checkins.map((c: any) => (
+              <div key={c.date} className="flex items-center gap-3 text-xs">
+                <span className="w-16 shrink-0 text-neutral-400">{c.date.slice(5)}</span>
+                <span>mood {c.mood ?? "–"}</span>
+                <span className="text-neutral-400">energy {c.energy ?? "–"}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-neutral-400">No check-ins yet — rate your mood/energy from Today.</p>
+        )}
+      </div>
     </div>
   );
 }

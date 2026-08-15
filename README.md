@@ -148,8 +148,10 @@ scheduled dates, task dependencies (blocked-by), full-text search (SQLite FTS5).
 **Views**: Today (greeting header, stats, progress bar), Inbox with quick capture and project
 routing, Upcoming (grouped by date), Projects (colorful cards + kanban board with
 drag-and-drop), a full internal Calendar (month grid / week / 30-day agenda, with a create/edit
-event modal — color, all-day, location, linked project — and scheduled tasks overlaid), Search,
-Analytics (completion trends, focus minutes/day, project velocity, overdue count), dark/light
+event modal — color, all-day, location, linked project — and scheduled tasks overlaid), Search
+(tasks, notes, habits, goals, and projects),
+Analytics (completion trends, focus minutes/day, project velocity, habit streaks, goal
+progress, time tracked, mood/energy trend), dark/light
 theme, a task detail drawer (click any task for inline editing, subtasks with a progress bar),
 a global quick-add modal (`N` key), and toasts with undo on complete/delete.
 
@@ -161,7 +163,12 @@ with daily totals.
 occurrence automatically.
 
 **Goals & habits**: goal hierarchy with horizon (life/annual/semester/monthly/weekly/daily)
-and progress tracking; habit creation with daily completion logging.
+and progress tracking; habits with daily completion logging, an optional deadline time
+(e.g. "finish by 11:59 PM") that turns urgent as it approaches, and optional quantity targets
+(e.g. "8 glasses of water") logged incrementally instead of a single done/not-done tap.
+
+**Daily check-in**: a one-tap mood/energy rating (1–5) from the Today view, tracked over time
+in Analytics.
 
 **Notes**: markdown-capable notes, linkable to a project or task.
 

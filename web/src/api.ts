@@ -224,11 +224,20 @@ export const api = {
   },
   habits: {
     list: () => req<any[]>(`/habits`),
-    create: (body: { title: string; frequency?: string }) =>
+    create: (body: { title: string; frequency?: string; deadlineTime?: string; targetCount?: number; unit?: string }) =>
       req<any>(`/habits`, { method: "POST", body: JSON.stringify(body) }),
-    log: (id: string) => req<any>(`/habits/${id}/log`, { method: "POST", body: JSON.stringify({}) }),
+    update: (id: string, body: Record<string, unknown>) =>
+      req<any>(`/habits/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    log: (id: string, amount?: number) => req<any>(`/habits/${id}/log`, { method: "POST", body: JSON.stringify({ amount }) }),
     unlog: (id: string) => req<void>(`/habits/${id}/log`, { method: "DELETE", body: JSON.stringify({}) }),
     remove: (id: string) => req<void>(`/habits/${id}`, { method: "DELETE" }),
+  },
+  checkins: {
+    today: () => req<any>(`/checkins/today`),
+    list: (params?: { from?: string; to?: string }) =>
+      req<any[]>(`/checkins${params ? "?" + new URLSearchParams(params as any).toString() : ""}`),
+    save: (date: string, body: { mood?: number; energy?: number; note?: string }) =>
+      req<any>(`/checkins/${date}`, { method: "PUT", body: JSON.stringify(body) }),
   },
   notes: {
     list: (params?: Record<string, string>) =>

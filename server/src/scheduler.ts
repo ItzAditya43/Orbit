@@ -6,7 +6,7 @@ import { dataDir } from "./dataDir.js";
 
 export const backupsDir = path.join(dataDir, "backups");
 
-const TABLES = ["projects", "tags", "task_tags", "tasks", "task_dependencies", "calendar_events", "goals", "habits", "habit_logs", "notes"];
+const TABLES = ["projects", "tags", "task_tags", "tasks", "task_dependencies", "calendar_events", "goals", "habits", "habit_logs", "notes", "daily_checkins"];
 
 function getSetting(key: string, fallback: unknown) {
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as any;

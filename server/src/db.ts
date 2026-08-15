@@ -280,6 +280,31 @@ const projectColumns = db.prepare("PRAGMA table_info(projects)").all() as { name
 const projectColumnNames = new Set(projectColumns.map((c) => c.name));
 if (!projectColumnNames.has("deleted_at")) db.exec("ALTER TABLE projects ADD COLUMN deleted_at TEXT");
 
+// Time-boxed + quantity-based habits (e.g. "drink water by midnight", "read 20 pages"),
+// on top of the original plain daily-checkbox habit.
+const habitColumns = db.prepare("PRAGMA table_info(habits)").all() as { name: string }[];
+const habitColumnNames = new Set(habitColumns.map((c) => c.name));
+if (!habitColumnNames.has("deadline_time")) db.exec("ALTER TABLE habits ADD COLUMN deadline_time TEXT"); // HH:MM, local
+if (!habitColumnNames.has("target_count")) db.exec("ALTER TABLE habits ADD COLUMN target_count INTEGER"); // NULL = simple done/not-done
+if (!habitColumnNames.has("unit")) db.exec("ALTER TABLE habits ADD COLUMN unit TEXT"); // e.g. "glasses", "pages"
+if (!habitColumnNames.has("archived")) db.exec("ALTER TABLE habits ADD COLUMN archived INTEGER NOT NULL DEFAULT 0");
+
+const habitLogColumns = db.prepare("PRAGMA table_info(habit_logs)").all() as { name: string }[];
+const habitLogColumnNames = new Set(habitLogColumns.map((c) => c.name));
+if (!habitLogColumnNames.has("amount")) db.exec("ALTER TABLE habit_logs ADD COLUMN amount INTEGER NOT NULL DEFAULT 1");
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS daily_checkins (
+  id TEXT PRIMARY KEY,
+  date TEXT NOT NULL UNIQUE,
+  mood INTEGER, -- 1-5
+  energy INTEGER, -- 1-5
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`);
+
 // Backfill notes_fts for databases that had a `notes` table before the FTS index existed.
 const notesFtsCount = (db.prepare("SELECT COUNT(*) c FROM notes_fts").get() as any).c;
 const notesCount = (db.prepare("SELECT COUNT(*) c FROM notes").get() as any).c;

@@ -76,7 +76,8 @@ export default function Today() {
   const focusMinutes = focusToday.reduce((sum: number, s: any) => sum + (s.planned_minutes ?? 25), 0);
 
   const frog = [...open].sort((a, b) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority])[0];
-  const habitsDueToday = habits.filter((h: any) => h.frequency === "daily" && !h.logs?.some((l: any) => l.date === todayStr));
+  const habitsDueToday = habits.filter((h: any) => h.frequency === "daily" && !h.doneToday);
+  const { data: checkin } = useQuery({ queryKey: ["checkins", "today"], queryFn: api.checkins.today });
 
   const autoSchedule = async () => {
     const res = await api.tasks.autoSchedule(todayStr);
@@ -149,22 +150,75 @@ export default function Today() {
           <p className="text-[10px] uppercase tracking-wide text-neutral-400 flex items-center gap-1">
             <RepeatIcon size={11} /> Habits today
           </p>
-          {habitsDueToday.map((h: any) => (
-            <div key={h.id} className="flex items-center justify-between text-sm">
-              <span>{h.title}</span>
-              <button
-                onClick={async () => {
-                  await api.habits.log(h.id);
-                  qc.invalidateQueries({ queryKey: ["habits"] });
-                }}
-                className="text-xs px-2 py-1 rounded-md border border-neutral-200 dark:border-neutral-800"
-              >
-                Mark done
-              </button>
-            </div>
-          ))}
+          {habitsDueToday.map((h: any) => {
+            const isQuantity = !!h.target_count;
+            const urgent = h.deadlineStatus === "due-soon" || h.deadlineStatus === "missed";
+            return (
+              <div key={h.id} className="flex items-center justify-between text-sm">
+                <span className={h.deadlineStatus === "missed" ? "text-red-500" : urgent ? "text-amber-500" : ""}>
+                  {h.title}
+                  {h.deadline_time && <span className="text-neutral-400"> · by {h.deadline_time}</span>}
+                  {isQuantity && (
+                    <span className="text-neutral-400">
+                      {" "}
+                      · {h.todayAmount}/{h.target_count} {h.unit ?? ""}
+                    </span>
+                  )}
+                </span>
+                <button
+                  onClick={async () => {
+                    await api.habits.log(h.id, isQuantity ? 1 : undefined);
+                    qc.invalidateQueries({ queryKey: ["habits"] });
+                  }}
+                  className="text-xs px-2 py-1 rounded-md border border-neutral-200 dark:border-neutral-800"
+                >
+                  {isQuantity ? `+1${h.unit ? ` ${h.unit}` : ""}` : "Mark done"}
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
+
+      <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 space-y-2">
+        <p className="text-[10px] uppercase tracking-wide text-neutral-400">How are you feeling today?</p>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-neutral-400 w-12">Mood</span>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                onClick={async () => {
+                  await api.checkins.save(todayStr, { mood: n, energy: checkin?.energy });
+                  qc.invalidateQueries({ queryKey: ["checkins"] });
+                }}
+                className={`h-6 w-6 rounded-full text-xs ${
+                  checkin?.mood === n ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900" : "border border-neutral-200 dark:border-neutral-800"
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-neutral-400 w-12">Energy</span>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                onClick={async () => {
+                  await api.checkins.save(todayStr, { mood: checkin?.mood, energy: n });
+                  qc.invalidateQueries({ queryKey: ["checkins"] });
+                }}
+                className={`h-6 w-6 rounded-full text-xs ${
+                  checkin?.energy === n ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900" : "border border-neutral-200 dark:border-neutral-800"
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <QuickAdd onAdd={onAdd} placeholder="Add a task for today..." />
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}

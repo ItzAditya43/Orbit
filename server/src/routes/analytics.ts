@@ -45,9 +45,16 @@ analyticsRouter.get("/summary", (req, res) => {
     .all();
 
   // Habits: per-habit streak + completions in range, plus an overall today-completion rate.
-  const habitRows = db.prepare("SELECT id, title FROM habits").all() as { id: string; title: string }[];
+  const habitRows = db.prepare("SELECT id, title, target_count FROM habits WHERE archived = 0").all() as {
+    id: string;
+    title: string;
+    target_count: number | null;
+  }[];
   const habitStats = habitRows.map((h) => {
-    const logs = db.prepare("SELECT date FROM habit_logs WHERE habit_id = ? ORDER BY date DESC LIMIT 90").all(h.id) as { date: string }[];
+    const logs = db.prepare("SELECT date, amount FROM habit_logs WHERE habit_id = ? ORDER BY date DESC LIMIT 90").all(h.id) as {
+      date: string;
+      amount: number;
+    }[];
     const dates = logs.map((l) => l.date);
     const today = new Date().toISOString().slice(0, 10);
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
@@ -62,7 +69,9 @@ analyticsRouter.get("/summary", (req, res) => {
       }
     }
     const inRange = dates.filter((d) => (!from || d >= from) && (!to || d <= to)).length;
-    return { id: h.id, title: h.title, streak, completedToday: dates[0] === today, totalCompletions: dates.length, completionsInRange: inRange };
+    const todayLog = logs.find((l) => l.date === today);
+    const completedToday = h.target_count ? (todayLog?.amount ?? 0) >= h.target_count : !!todayLog;
+    return { id: h.id, title: h.title, streak, completedToday, totalCompletions: dates.length, completionsInRange: inRange };
   });
   const habitsCompletedToday = habitStats.filter((h) => h.completedToday).length;
 
@@ -90,6 +99,13 @@ analyticsRouter.get("/summary", (req, res) => {
     db.prepare("SELECT COUNT(*) c FROM calendar_events WHERE starts_at >= datetime('now')").get() as any
   ).c;
 
+  const checkinClauses: string[] = [];
+  const checkinParams: unknown[] = [];
+  if (from) { checkinClauses.push("date >= ?"); checkinParams.push(from); }
+  if (to) { checkinClauses.push("date <= ?"); checkinParams.push(to); }
+  const checkinWhere = checkinClauses.length ? `WHERE ${checkinClauses.join(" AND ")}` : "";
+  const checkins = db.prepare(`SELECT date, mood, energy FROM daily_checkins ${checkinWhere} ORDER BY date DESC LIMIT ?`).all(...checkinParams, days);
+
   res.json({
     totalOpen,
     totalDone,
@@ -104,5 +120,6 @@ analyticsRouter.get("/summary", (req, res) => {
     notes: { total: totalNotes },
     timeTrackedMinutes,
     upcomingEvents,
+    checkins,
   });
 });
