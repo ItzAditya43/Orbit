@@ -92,13 +92,26 @@ export default function ProjectDetail() {
             onClick={async () => {
               await api.projects.update(id!, { is_archived: 1 });
               qc.invalidateQueries({ queryKey: ["projects"] });
-              toast(`"${project?.name}" archived`);
+              toast(`"${project?.name}" archived — see Projects > Archived`);
               navigate("/projects");
             }}
-            title="Archive project"
+            title="Archive project (hide it, but keep it — see Projects > Archived)"
+            className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 flex items-center gap-1"
+          >
+            Archive
+          </button>
+          <button
+            onClick={async () => {
+              if (!confirm(`Delete "${project?.name}"? This can be undone from Trash.`)) return;
+              await api.projects.remove(id!);
+              qc.invalidateQueries({ queryKey: ["projects"] });
+              toast(`"${project?.name}" deleted`);
+              navigate("/projects");
+            }}
+            title="Delete project"
             className="text-neutral-400 hover:text-red-500 flex items-center gap-1"
           >
-            <TrashIcon size={13} /> Archive
+            <TrashIcon size={13} /> Delete
           </button>
         </div>
       </div>

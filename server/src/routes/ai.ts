@@ -68,26 +68,47 @@ aiRouter.post("/actions/:id/reject", (req, res) => {
 });
 
 // POST /api/ai/command  { text: "add task buy milk tomorrow" }
-// Provider priority per spec §18: Ollama -> configured free API (not wired) -> deterministic fallback.
+//
+// The deterministic parser runs FIRST, not Ollama — it's fast and exactly-reliable for the
+// command shapes it recognizes. Small local models (what's actually feasible to run without
+// a GPU/heavy RAM) are unreliable at strict tool-arg JSON: tested live against llama3.2:1b,
+// it invented its own args schema and dropped "tomorrow" from a date entirely. Trusting that
+// with real data mutations isn't worth it. Instead Ollama is used ONLY as a conversational
+// fallback for whatever the deterministic parser doesn't recognize — the actual gap the user
+// was hitting ("it's just command-like"), without risking bad writes from a weak model.
 aiRouter.post("/command", async (req, res) => {
   const text: string = req.body?.text ?? "";
   if (!text.trim()) return res.status(400).json({ error: "text required" });
 
-  const ollamaHost = process.env.OLLAMA_HOST;
-  if (ollamaHost) {
-    try {
-      const result = await runViaOllama(ollamaHost, text);
-      if (result) return res.json(result);
-    } catch {
-      // fall through to deterministic parser
-    }
+  const deterministic = runDeterministic(text);
+  if (deterministic.tool !== null) return res.json(deterministic);
+
+  const ollamaHost = process.env.OLLAMA_HOST ?? "http://localhost:11434";
+  try {
+    const reply = await getConversationalReply(ollamaHost, text);
+    if (reply) return res.json({ provider: "ollama", tool: null, status: "executed", message: reply });
+  } catch {
+    // fall through to the deterministic "didn't recognize that" message
   }
 
-  res.json(runDeterministic(text));
+  res.json(deterministic);
 });
 
-async function runViaOllama(host: string, text: string) {
-  const model = process.env.OLLAMA_MODEL ?? "llama3.2";
+// Extracts the first {...} block from a response, tolerating stray prose/markdown fences
+// around it — small models frequently don't follow "JSON only" instructions exactly.
+function extractJsonObject(content: string): any | null {
+  const start = content.indexOf("{");
+  const end = content.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  try {
+    return JSON.parse(content.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+async function getConversationalReply(host: string, text: string): Promise<string | null> {
+  const model = process.env.OLLAMA_MODEL ?? "llama3.2:1b";
   const r = await fetch(`${host}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -98,22 +119,23 @@ async function runViaOllama(host: string, text: string) {
         {
           role: "system",
           content:
-            "You are a productivity assistant. Respond ONLY with strict JSON: {\"tool\": <one of " +
-            TOOL_NAMES.join(", ") +
-            ">, \"args\": {...}}. No prose.",
+            "You are Orbit's assistant, a local productivity app. Answer the user's question or message " +
+            "directly and briefly (2-3 sentences max). You do not have access to their tasks or data right " +
+            'now — if they ask about those, tell them to try a command like "add task ..." or "plan my day" ' +
+            'instead. Respond ONLY with strict JSON: {"reply": "<your answer>"}. No prose outside the JSON, no markdown fences.',
         },
         { role: "user", content: text },
       ],
     }),
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(15000),
   });
   if (!r.ok) return null;
   const data: any = await r.json();
-  const content = data?.message?.content;
-  if (!content) return null;
-  const parsed = JSON.parse(content);
-  const outcome = decideAndRun(parsed.tool, parsed.args ?? {});
-  return { provider: "ollama", tool: parsed.tool, args: parsed.args, ...outcome };
+  const content: string = data?.message?.content ?? "";
+  const parsed = extractJsonObject(content);
+  if (parsed?.reply) return String(parsed.reply);
+  // Model ignored the JSON instruction but still said something useful in plain text.
+  return content.trim() || null;
 }
 
 // Deterministic fallback: simple pattern matching, no model dependency (§18 "deterministic operations").

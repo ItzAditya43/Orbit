@@ -127,7 +127,8 @@ export function AICommandBar() {
         <div className="max-h-72 overflow-y-auto p-4 space-y-2">
           {log.length === 0 && (
             <p className="text-xs text-neutral-400">
-              Try: "add task write report tomorrow", "start a 25 minute focus", "plan my day", "how much time do I have".
+              Try a command — "add task write report tomorrow", "start a 25 minute focus", "plan my day" — or just ask
+              anything else and it'll answer directly.
             </p>
           )}
           {log.map((m, i) => (

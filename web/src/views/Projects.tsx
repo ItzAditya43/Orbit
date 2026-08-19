@@ -10,7 +10,9 @@ const COLORS = ["#f87171", "#fb923c", "#fbbf24", "#4ade80", "#22d3ee", "#818cf8"
 export default function Projects() {
   const qc = useQueryClient();
   const { data: projects = [], isLoading } = useQuery({ queryKey: ["projects"], queryFn: api.projects.list });
+  const { data: archived = [] } = useQuery({ queryKey: ["projects", "archived"], queryFn: api.projects.archived });
   const [name, setName] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
 
   const create = async () => {
     if (!name.trim()) return;
@@ -22,7 +24,46 @@ export default function Projects() {
 
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-6">
-      <h1 className="text-xl font-semibold">Projects</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Projects</h1>
+        {archived.length > 0 && (
+          <button onClick={() => setShowArchived((v) => !v)} className="text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
+            {showArchived ? "Hide archived" : `Archived (${archived.length})`}
+          </button>
+        )}
+      </div>
+
+      {showArchived && (
+        <div className="space-y-2 rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
+          <p className="text-xs uppercase tracking-wide text-neutral-400">Archived projects</p>
+          {archived.map((p: any) => (
+            <div key={p.id} className="flex items-center justify-between text-sm py-1">
+              <span>{p.name}</span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    await api.projects.update(p.id, { is_archived: 0 });
+                    qc.invalidateQueries({ queryKey: ["projects"] });
+                  }}
+                  className="text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                >
+                  Unarchive
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Delete "${p.name}"? This can be undone from Trash.`)) return;
+                    await api.projects.remove(p.id);
+                    qc.invalidateQueries({ queryKey: ["projects"] });
+                  }}
+                  className="text-xs text-neutral-400 hover:text-red-500"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();

@@ -156,6 +156,15 @@ export default function Habits() {
                   {h.doneToday ? "Done today" : "Mark done"}
                 </button>
               )}
+              <button
+                onClick={async () => {
+                  await api.habits.remove(h.id);
+                  invalidate();
+                }}
+                className="ml-2 text-neutral-400 hover:text-red-500 text-xs shrink-0"
+              >
+                delete
+              </button>
             </div>
           );
         })}

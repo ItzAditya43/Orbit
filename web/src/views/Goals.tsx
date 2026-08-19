@@ -13,7 +13,18 @@ function GoalCard({ goal, invalidate }: { goal: any; invalidate: () => void }) {
     <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 space-y-2">
       <div className="flex justify-between items-center">
         <span className="text-sm font-medium">{goal.title}</span>
-        <span className="text-[10px] uppercase text-neutral-400">{goal.horizon}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase text-neutral-400">{goal.horizon}</span>
+          <button
+            onClick={async () => {
+              await api.goals.remove(goal.id);
+              invalidate();
+            }}
+            className="text-neutral-400 hover:text-red-500 text-xs"
+          >
+            delete
+          </button>
+        </div>
       </div>
 
       {milestones.length === 0 ? (
