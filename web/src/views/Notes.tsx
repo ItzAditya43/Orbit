@@ -4,6 +4,7 @@ import { api } from "../api";
 import { EmptyState } from "../components/EmptyState";
 import { NoteIcon, PinIcon, SearchIcon, TargetIcon } from "../icons";
 import { useToastStore } from "../toastStore";
+import { AttachmentsPanel } from "../components/AttachmentsPanel";
 
 const COLORS = [
   { name: "default", light: "bg-white dark:bg-neutral-900", swatch: "bg-white dark:bg-neutral-900 border" },
@@ -54,6 +55,7 @@ function NoteCard({ note, invalidate }: { note: any; invalidate: () => void }) {
             rows={4}
             className="w-full bg-transparent text-sm outline-none resize-none text-neutral-600 dark:text-neutral-300"
           />
+          <AttachmentsPanel entityType="note" entityId={note.id} />
           <div className="flex justify-end">
             <button onClick={save} className="text-xs px-2.5 py-1 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900">
               Done

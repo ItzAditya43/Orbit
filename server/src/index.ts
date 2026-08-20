@@ -20,11 +20,16 @@ import { settingsRouter } from "./routes/settings.js";
 import { taskTemplatesRouter } from "./routes/taskTemplates.js";
 import { reviewRouter } from "./routes/review.js";
 import { filtersRouter } from "./routes/filters.js";
+import { attachmentsRouter } from "./routes/attachments.js";
+import { boardsRouter } from "./routes/boards.js";
 import { startScheduler } from "./scheduler.js";
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Pasted/uploaded images travel as base64 inside the JSON body (see routes/attachments.ts —
+// avoids a multipart-parsing dependency for a single-user local app) — default 100kb express
+// limit would reject anything but a tiny thumbnail, so this is raised for real photos/screenshots.
+app.use(express.json({ limit: "30mb" }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/tasks", tasksRouter);
@@ -48,6 +53,8 @@ app.use("/api/settings", settingsRouter);
 app.use("/api/task-templates", taskTemplatesRouter);
 app.use("/api/review", reviewRouter);
 app.use("/api/filters", filtersRouter);
+app.use("/api/attachments", attachmentsRouter);
+app.use("/api/boards", boardsRouter);
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4310;
 app.listen(PORT, () => {

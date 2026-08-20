@@ -303,6 +303,35 @@ CREATE TABLE IF NOT EXISTS daily_checkins (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+-- Images attached to a task/note/project/board (or standalone). Files live on disk under
+-- <dataDir>/attachments/<id>.<ext>; this table is just the pointer + metadata.
+CREATE TABLE IF NOT EXISTS attachments (
+  id TEXT PRIMARY KEY,
+  filename TEXT NOT NULL,
+  stored_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  entity_type TEXT NOT NULL, -- task | note | project | board
+  entity_id TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_attachments_entity ON attachments(entity_type, entity_id);
+
+-- Freeform per-project (or standalone) canvas: sticky notes, typed text, pasted images,
+-- freehand sketch strokes, all positioned on an infinite board. elements is a JSON array
+-- of shape objects (id/type/x/y/w/h/...type-specific fields) — no per-shape table, since
+-- the shape of what's on a board is inherently open-ended and doesn't benefit from being
+-- normalized into columns.
+CREATE TABLE IF NOT EXISTS boards (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  elements TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_boards_project ON boards(project_id);
 `);
 
 // Backfill notes_fts for databases that had a `notes` table before the FTS index existed.

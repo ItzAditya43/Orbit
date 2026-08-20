@@ -5,6 +5,7 @@ import { useTaskDetailStore } from "../taskDetailStore";
 import { PriorityPicker } from "./PriorityPicker";
 import { useToastStore } from "../toastStore";
 import { CheckIcon, XIcon } from "../icons";
+import { AttachmentsPanel } from "./AttachmentsPanel";
 
 const COLORS = ["", "#f87171", "#fb923c", "#fbbf24", "#4ade80", "#22d3ee", "#818cf8", "#c084fc"];
 
@@ -266,6 +267,11 @@ export function TaskDetailDrawer() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="pl-8 space-y-1.5">
+              <p className="text-xs font-medium text-neutral-500">Images</p>
+              <AttachmentsPanel entityType="task" entityId={openTaskId} />
             </div>
 
             <div className="pl-8 pt-4 border-t border-neutral-100 dark:border-neutral-800 flex items-center gap-3">

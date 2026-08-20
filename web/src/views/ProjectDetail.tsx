@@ -64,6 +64,9 @@ export default function ProjectDetail() {
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full" style={{ background: project?.color ?? "#999" }} />
           <h1 className="text-xl font-semibold">{project?.name ?? "Project"}</h1>
+          <Link to={`/projects/${id}/hub`} className="text-xs text-neutral-400 hover:underline ml-2">
+            Hub →
+          </Link>
         </div>
         <div className="flex items-center gap-2 text-xs">
           <div className="flex gap-1">

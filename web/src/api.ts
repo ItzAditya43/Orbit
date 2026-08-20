@@ -292,4 +292,45 @@ export const api = {
     importEncrypted: (body: { passphrase: string; salt: string; iv: string; authTag: string; ciphertext: string }) =>
       req<any>(`/sync/import-encrypted`, { method: "POST", body: JSON.stringify(body) }),
   },
+  attachments: {
+    list: (entityType: string, entityId: string) =>
+      req<Attachment[]>(`/attachments?${new URLSearchParams({ entityType, entityId }).toString()}`),
+    upload: (body: { dataUrl: string; entityType: string; entityId?: string; filename?: string }) =>
+      req<Attachment>(`/attachments`, { method: "POST", body: JSON.stringify(body) }),
+    remove: (id: string) => req<void>(`/attachments/${id}`, { method: "DELETE" }),
+    rawUrl: (id: string) => `${BASE}/attachments/${id}/raw`,
+  },
+  boards: {
+    list: (projectId?: string) => req<Board[]>(`/boards${projectId ? `?projectId=${projectId}` : ""}`),
+    get: (id: string) => req<Board>(`/boards/${id}`),
+    create: (body: { title: string; projectId?: string }) => req<Board>(`/boards`, { method: "POST", body: JSON.stringify(body) }),
+    update: (id: string, body: { title?: string; elements?: BoardElement[] }) =>
+      req<Board>(`/boards/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    remove: (id: string) => req<void>(`/boards/${id}`, { method: "DELETE" }),
+  },
 };
+
+export interface Attachment {
+  id: string;
+  filename: string;
+  stored_name: string;
+  mime_type: string;
+  size: number;
+  entity_type: string;
+  entity_id: string | null;
+  created_at: string;
+}
+
+export type BoardElement =
+  | { id: string; type: "text"; x: number; y: number; w: number; h: number; text: string; color?: string }
+  | { id: string; type: "image"; x: number; y: number; w: number; h: number; attachmentId: string }
+  | { id: string; type: "sketch"; x: number; y: number; w: number; h: number; points: number[][]; color: string; strokeWidth: number };
+
+export interface Board {
+  id: string;
+  title: string;
+  project_id: string | null;
+  elements: BoardElement[];
+  created_at: string;
+  updated_at: string;
+}

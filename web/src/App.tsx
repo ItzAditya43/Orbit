@@ -29,6 +29,8 @@ import {
   PlusIcon,
   FilterIcon,
   TrashIcon,
+  GridIcon,
+  PencilIcon,
 } from "./icons";
 import Today from "./views/Today";
 import Inbox from "./views/Inbox";
@@ -49,6 +51,9 @@ import Settings from "./views/Settings";
 import Review from "./views/Review";
 import Filters from "./views/Filters";
 import Trash from "./views/Trash";
+import Matrix from "./views/Matrix";
+import BoardView from "./views/BoardView";
+import ProjectHub from "./views/ProjectHub";
 
 const NAV_GROUPS = [
   {
@@ -66,9 +71,11 @@ const NAV_GROUPS = [
     items: [
       { to: "/focus", label: "Focus", icon: TargetIcon },
       { to: "/time", label: "Time", icon: ClockIcon },
+      { to: "/matrix", label: "Matrix", icon: GridIcon },
       { to: "/goals", label: "Goals", icon: RocketIcon },
       { to: "/habits", label: "Habits", icon: RepeatIcon },
       { to: "/notes", label: "Notes", icon: NoteIcon },
+      { to: "/boards", label: "Boards", icon: PencilIcon },
     ],
   },
   {
@@ -183,6 +190,10 @@ export default function App() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
+          <Route path="/projects/:id/hub" element={<ProjectHub />} />
+          <Route path="/matrix" element={<Matrix />} />
+          <Route path="/boards" element={<BoardView />} />
+          <Route path="/boards/:id" element={<BoardView />} />
           <Route path="/focus" element={<Focus />} />
           <Route path="/time" element={<TimeTracking />} />
           <Route path="/goals" element={<Goals />} />
