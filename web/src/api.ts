@@ -224,7 +224,7 @@ export const api = {
   },
   habits: {
     list: () => req<any[]>(`/habits`),
-    create: (body: { title: string; frequency?: string; deadlineTime?: string; targetCount?: number; unit?: string }) =>
+    create: (body: { title: string; frequency?: string; targetPerPeriod?: number; deadlineTime?: string; targetCount?: number; unit?: string; goalId?: string }) =>
       req<any>(`/habits`, { method: "POST", body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) =>
       req<any>(`/habits/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -236,7 +236,7 @@ export const api = {
     today: () => req<any>(`/checkins/today`),
     list: (params?: { from?: string; to?: string }) =>
       req<any[]>(`/checkins${params ? "?" + new URLSearchParams(params as any).toString() : ""}`),
-    save: (date: string, body: { mood?: number; energy?: number; note?: string }) =>
+    save: (date: string, body: { mood?: number; energy?: number; note?: string; sleepTime?: string; wakeTime?: string }) =>
       req<any>(`/checkins/${date}`, { method: "PUT", body: JSON.stringify(body) }),
   },
   notes: {
@@ -276,6 +276,12 @@ export const api = {
   settings: {
     get: () => req<any>(`/settings`),
     update: (body: Record<string, unknown>) => req<any>(`/settings`, { method: "PATCH", body: JSON.stringify(body) }),
+  },
+  device: {
+    info: () => req<{ deviceId: string; deviceName: string; publicKey: string }>(`/device`),
+    startPairing: () => req<{ deviceId: string; deviceName: string; publicKey: string; token: string; expiresAt: number }>(`/device/pairing/start`, { method: "POST" }),
+    paired: () => req<{ id: string; device_name: string; public_key: string; paired_at: string }[]>(`/device/paired`),
+    removePaired: (id: string) => req<void>(`/device/paired/${id}`, { method: "DELETE" }),
   },
   review: {
     daily: () => req<any>(`/review/daily`),

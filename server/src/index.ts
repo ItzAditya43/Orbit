@@ -22,6 +22,7 @@ import { reviewRouter } from "./routes/review.js";
 import { filtersRouter } from "./routes/filters.js";
 import { attachmentsRouter } from "./routes/attachments.js";
 import { boardsRouter } from "./routes/boards.js";
+import { deviceRouter } from "./routes/device.js";
 import { startScheduler } from "./scheduler.js";
 
 const app = express();
@@ -55,6 +56,7 @@ app.use("/api/review", reviewRouter);
 app.use("/api/filters", filtersRouter);
 app.use("/api/attachments", attachmentsRouter);
 app.use("/api/boards", boardsRouter);
+app.use("/api/device", deviceRouter);
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4310;
 app.listen(PORT, () => {

@@ -76,7 +76,10 @@ export default function Today() {
   const focusMinutes = focusToday.reduce((sum: number, s: any) => sum + (s.planned_minutes ?? 25), 0);
 
   const frog = [...open].sort((a, b) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority])[0];
-  const habitsDueToday = habits.filter((h: any) => h.frequency === "daily" && !h.doneToday);
+  // Quantity habits (e.g. "8 glasses") stay visible while under target even after a partial
+  // log today — everything else (plain daily, or weekly/monthly period habits) drops off
+  // once logged today since there's nothing more to do on it until tomorrow.
+  const habitsDueToday = habits.filter((h: any) => !h.doneToday && (h.target_count ? true : !h.loggedToday));
   const { data: checkin } = useQuery({ queryKey: ["checkins", "today"], queryFn: api.checkins.today });
 
   const autoSchedule = async () => {
@@ -164,6 +167,12 @@ export default function Today() {
                       · {h.todayAmount}/{h.target_count} {h.unit ?? ""}
                     </span>
                   )}
+                  {h.periodProgress && (
+                    <span className="text-neutral-400">
+                      {" "}
+                      · {h.periodProgress.completed}/{h.periodProgress.target} {h.periodProgress.label}
+                    </span>
+                  )}
                 </span>
                 <button
                   onClick={async () => {
@@ -172,7 +181,7 @@ export default function Today() {
                   }}
                   className="text-xs px-2 py-1 rounded-md border border-neutral-200 dark:border-neutral-800"
                 >
-                  {isQuantity ? `+1${h.unit ? ` ${h.unit}` : ""}` : "Mark done"}
+                  {isQuantity ? `+1${h.unit ? ` ${h.unit}` : ""}` : "Log"}
                 </button>
               </div>
             );
@@ -189,7 +198,7 @@ export default function Today() {
               <button
                 key={n}
                 onClick={async () => {
-                  await api.checkins.save(todayStr, { mood: n, energy: checkin?.energy });
+                  await api.checkins.save(todayStr, { mood: n });
                   qc.invalidateQueries({ queryKey: ["checkins"] });
                 }}
                 className={`h-6 w-6 rounded-full text-xs ${
@@ -206,7 +215,7 @@ export default function Today() {
               <button
                 key={n}
                 onClick={async () => {
-                  await api.checkins.save(todayStr, { mood: checkin?.mood, energy: n });
+                  await api.checkins.save(todayStr, { energy: n });
                   qc.invalidateQueries({ queryKey: ["checkins"] });
                 }}
                 className={`h-6 w-6 rounded-full text-xs ${
@@ -217,6 +226,34 @@ export default function Today() {
               </button>
             ))}
           </div>
+        </div>
+        <div className="flex items-center gap-4 pt-1">
+          <label className="flex items-center gap-1.5 text-xs text-neutral-400">
+            Slept
+            <input
+              type="time"
+              defaultValue={checkin?.sleep_time ?? ""}
+              onBlur={async (e) => {
+                if (!e.target.value) return;
+                await api.checkins.save(todayStr, { sleepTime: e.target.value });
+                qc.invalidateQueries({ queryKey: ["checkins"] });
+              }}
+              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-neutral-400">
+            Woke
+            <input
+              type="time"
+              defaultValue={checkin?.wake_time ?? ""}
+              onBlur={async (e) => {
+                if (!e.target.value) return;
+                await api.checkins.save(todayStr, { wakeTime: e.target.value });
+                qc.invalidateQueries({ queryKey: ["checkins"] });
+              }}
+              className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1"
+            />
+          </label>
         </div>
       </div>
 

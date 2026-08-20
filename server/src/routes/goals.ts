@@ -7,7 +7,8 @@ export const goalsRouter = Router();
 function hydrate(goal: any) {
   if (!goal) return goal;
   const milestones = db.prepare("SELECT * FROM goal_milestones WHERE goal_id = ? ORDER BY order_index ASC").all(goal.id);
-  return { ...goal, milestones };
+  const habits = db.prepare("SELECT id, title, frequency FROM habits WHERE goal_id = ? AND archived = 0").all(goal.id);
+  return { ...goal, milestones, habits };
 }
 
 goalsRouter.get("/", (_req, res) => {

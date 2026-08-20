@@ -3,6 +3,68 @@ import { useState, useEffect } from "react";
 import { api } from "../api";
 import { useToastStore } from "../toastStore";
 
+function DevicesSection() {
+  const qc = useQueryClient();
+  const { data: device } = useQuery({ queryKey: ["device"], queryFn: api.device.info });
+  const { data: paired = [] } = useQuery({ queryKey: ["device", "paired"], queryFn: api.device.paired });
+  const [pairing, setPairing] = useState<{ token: string; expiresAt: number } | null>(null);
+
+  const startPairing = async () => {
+    const res = await api.device.startPairing();
+    setPairing({ token: res.token, expiresAt: res.expiresAt });
+    setTimeout(() => setPairing((p) => (p?.token === res.token ? null : p)), res.expiresAt - Date.now());
+  };
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-sm font-semibold">Devices</h2>
+        <p className="text-xs text-neutral-400 mt-0.5">
+          Foundation for future device pairing — this device now has a stable identity, but there's no mobile app yet to
+          actually pair with, so nothing syncs beyond this machine.
+        </p>
+      </div>
+      {device && (
+        <div className="text-xs px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 space-y-1">
+          <p>
+            <span className="text-neutral-400">This device: </span>
+            {device.deviceName}
+          </p>
+          <p className="text-neutral-400 truncate">Public key: {device.publicKey.replace(/\n/g, "").slice(0, 60)}...</p>
+        </div>
+      )}
+      <button onClick={startPairing} className="text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
+        Generate pairing code
+      </button>
+      {pairing && (
+        <div className="text-xs px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 space-y-1">
+          <p className="text-neutral-400">Pairing token (expires in 60s) — nothing can scan this yet:</p>
+          <p className="font-mono break-all">{pairing.token}</p>
+        </div>
+      )}
+      {paired.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium">Paired devices</p>
+          {paired.map((d) => (
+            <div key={d.id} className="flex items-center justify-between text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
+              <span>{d.device_name}</span>
+              <button
+                onClick={async () => {
+                  await api.device.removePaired(d.id);
+                  qc.invalidateQueries({ queryKey: ["device", "paired"] });
+                }}
+                className="text-neutral-400 hover:text-red-500"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 const PERMISSION_MODES = [
   { value: "suggest", label: "Suggest", desc: "Every AI action needs your approval before it runs." },
   { value: "assist", label: "Assist", desc: "AI acts immediately on everyday actions (default)." },
@@ -268,6 +330,8 @@ export default function Settings() {
           </div>
         </div>
       </section>
+
+      <DevicesSection />
     </div>
   );
 }

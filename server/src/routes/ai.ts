@@ -67,15 +67,30 @@ aiRouter.post("/actions/:id/reject", (req, res) => {
   res.json({ ok: true });
 });
 
+// LLM-issued tool calls are restricted to tools that don't need an existing entity's ID —
+// the model has no grounding to know real task/project IDs, so anything requiring one
+// (complete_task, update_task, move_task, etc.) stays deterministic-parser-only.
+const LLM_SAFE_TOOLS: ToolName[] = [
+  "create_task",
+  "capture_idea",
+  "start_focus_session",
+  "create_project",
+  "create_calendar_event",
+  "search_notes",
+  "get_today",
+  "get_available_time",
+];
+
 // POST /api/ai/command  { text: "add task buy milk tomorrow" }
 //
 // The deterministic parser runs FIRST, not Ollama — it's fast and exactly-reliable for the
 // command shapes it recognizes. Small local models (what's actually feasible to run without
 // a GPU/heavy RAM) are unreliable at strict tool-arg JSON: tested live against llama3.2:1b,
-// it invented its own args schema and dropped "tomorrow" from a date entirely. Trusting that
-// with real data mutations isn't worth it. Instead Ollama is used ONLY as a conversational
-// fallback for whatever the deterministic parser doesn't recognize — the actual gap the user
-// was hitting ("it's just command-like"), without risking bad writes from a weak model.
+// it invented its own args schema and dropped "tomorrow" from a date entirely. So when Ollama
+// does issue a mutating tool call, it's ALWAYS queued for approval (see decideAndRunViaLlm)
+// regardless of the user's AI permission mode — the deterministic parser is still what's
+// trusted to execute immediately, this just gives free-form phrasing a path to *suggest*
+// an action instead of only being able to have a conversation about it.
 aiRouter.post("/command", async (req, res) => {
   const text: string = req.body?.text ?? "";
   if (!text.trim()) return res.status(400).json({ error: "text required" });
@@ -85,8 +100,8 @@ aiRouter.post("/command", async (req, res) => {
 
   const ollamaHost = process.env.OLLAMA_HOST ?? "http://localhost:11434";
   try {
-    const reply = await getConversationalReply(ollamaHost, text);
-    if (reply) return res.json({ provider: "ollama", tool: null, status: "executed", message: reply });
+    const result = await askOllama(ollamaHost, text);
+    if (result) return res.json(result);
   } catch {
     // fall through to the deterministic "didn't recognize that" message
   }
@@ -107,7 +122,7 @@ function extractJsonObject(content: string): any | null {
   }
 }
 
-async function getConversationalReply(host: string, text: string): Promise<string | null> {
+async function askOllama(host: string, text: string): Promise<any | null> {
   const model = process.env.OLLAMA_MODEL ?? "llama3.2:1b";
   const r = await fetch(`${host}/api/chat`, {
     method: "POST",
@@ -119,10 +134,13 @@ async function getConversationalReply(host: string, text: string): Promise<strin
         {
           role: "system",
           content:
-            "You are Orbit's assistant, a local productivity app. Answer the user's question or message " +
-            "directly and briefly (2-3 sentences max). You do not have access to their tasks or data right " +
-            'now — if they ask about those, tell them to try a command like "add task ..." or "plan my day" ' +
-            'instead. Respond ONLY with strict JSON: {"reply": "<your answer>"}. No prose outside the JSON, no markdown fences.',
+            "You are Orbit's assistant, a local productivity app. If the user clearly wants one of these " +
+            "actions taken, respond ONLY with strict JSON: " +
+            `{"tool": <one of ${LLM_SAFE_TOOLS.join(", ")}>, "args": {...}}. ` +
+            "For create_task, args are {title, dueDate?} with dueDate as YYYY-MM-DD. Otherwise, or if you're " +
+            "unsure, just answer directly and briefly (2-3 sentences max) as JSON: " +
+            '{"reply": "<your answer>"}. You do not have access to their existing tasks/data beyond what a ' +
+            "tool call returns. Never include prose outside the JSON object, never use markdown fences.",
         },
         { role: "user", content: text },
       ],
@@ -133,9 +151,42 @@ async function getConversationalReply(host: string, text: string): Promise<strin
   const data: any = await r.json();
   const content: string = data?.message?.content ?? "";
   const parsed = extractJsonObject(content);
-  if (parsed?.reply) return String(parsed.reply);
+
+  if (parsed?.reply) {
+    return { provider: "ollama", tool: null, status: "executed", message: String(parsed.reply) };
+  }
+  if (parsed?.tool && LLM_SAFE_TOOLS.includes(parsed.tool)) {
+    return decideAndRunViaLlm(parsed.tool, parsed.args ?? {});
+  }
   // Model ignored the JSON instruction but still said something useful in plain text.
-  return content.trim() || null;
+  if (!parsed && content.trim()) {
+    return { provider: "ollama", tool: null, status: "executed", message: content.trim() };
+  }
+  return null;
+}
+
+// Unlike decideAndRun (used by the deterministic parser), this ALWAYS queues for approval —
+// an LLM-issued tool call is inherently less trustworthy than a regex match, regardless of
+// what permission mode the user has configured for deterministic commands.
+function decideAndRunViaLlm(toolName: string, args: any) {
+  const isReadOnly = READ_ONLY_TOOLS.has(toolName as ToolName);
+  const label = toolName.replace(/_/g, " ");
+  if (isReadOnly) {
+    const result = runTool(toolName, args);
+    return { provider: "ollama", tool: toolName, args, status: "executed" as const, result, message: `Done — ${label}.` };
+  }
+  const id = randomUUID();
+  db.prepare("INSERT INTO ai_actions (id, tool_name, args_json, status, created_at) VALUES (?,?,?,?,?)").run(
+    id, toolName, JSON.stringify(args ?? {}), "pending", new Date().toISOString()
+  );
+  return {
+    provider: "ollama",
+    tool: toolName,
+    args,
+    status: "pending" as const,
+    actionId: id,
+    message: `Suggested: ${label}${args.title ? ` "${args.title}"` : ""}. Approve to confirm.`,
+  };
 }
 
 // Deterministic fallback: simple pattern matching, no model dependency (§18 "deterministic operations").

@@ -11,6 +11,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { NotificationCenter } from "./components/NotificationCenter";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { GlobalErrorHandler } from "./components/GlobalErrorHandler";
+import { HabitNudges } from "./components/HabitNudges";
 import {
   SunIcon,
   MoonIcon,
@@ -217,6 +218,7 @@ export default function App() {
       <CommandPalette />
       <ConnectionBanner />
       <GlobalErrorHandler />
+      <HabitNudges />
     </div>
   );
 }

@@ -288,6 +288,7 @@ if (!habitColumnNames.has("deadline_time")) db.exec("ALTER TABLE habits ADD COLU
 if (!habitColumnNames.has("target_count")) db.exec("ALTER TABLE habits ADD COLUMN target_count INTEGER"); // NULL = simple done/not-done
 if (!habitColumnNames.has("unit")) db.exec("ALTER TABLE habits ADD COLUMN unit TEXT"); // e.g. "glasses", "pages"
 if (!habitColumnNames.has("archived")) db.exec("ALTER TABLE habits ADD COLUMN archived INTEGER NOT NULL DEFAULT 0");
+if (!habitColumnNames.has("goal_id")) db.exec("ALTER TABLE habits ADD COLUMN goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL");
 
 const habitLogColumns = db.prepare("PRAGMA table_info(habit_logs)").all() as { name: string }[];
 const habitLogColumnNames = new Set(habitLogColumns.map((c) => c.name));
@@ -332,7 +333,23 @@ CREATE TABLE IF NOT EXISTS boards (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_boards_project ON boards(project_id);
+
+-- Foundation for future multi-device P2P sync (no working sync yet — this just establishes
+-- a stable device identity and a short-lived QR-pairing handshake). paired_devices records a
+-- device that completed pairing; nothing currently reads from it beyond the pairing flow
+-- itself since there's no sync engine consuming it yet.
+CREATE TABLE IF NOT EXISTS paired_devices (
+  id TEXT PRIMARY KEY,
+  device_name TEXT NOT NULL,
+  public_key TEXT NOT NULL,
+  paired_at TEXT NOT NULL
+);
 `);
+
+const checkinColumns = db.prepare("PRAGMA table_info(daily_checkins)").all() as { name: string }[];
+const checkinColumnNames = new Set(checkinColumns.map((c) => c.name));
+if (!checkinColumnNames.has("sleep_time")) db.exec("ALTER TABLE daily_checkins ADD COLUMN sleep_time TEXT"); // HH:MM, previous night
+if (!checkinColumnNames.has("wake_time")) db.exec("ALTER TABLE daily_checkins ADD COLUMN wake_time TEXT"); // HH:MM
 
 // Backfill notes_fts for databases that had a `notes` table before the FTS index existed.
 const notesFtsCount = (db.prepare("SELECT COUNT(*) c FROM notes_fts").get() as any).c;

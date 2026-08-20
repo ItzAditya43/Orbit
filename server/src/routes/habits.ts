@@ -25,12 +25,28 @@ function computeStreak(dates: string[]): number {
   return streak;
 }
 
+// Monday-start ISO week, so "3/4 this week" means the same thing to a user regardless of
+// which day they check on, not a rolling 7-day window that shifts under them.
+function currentWeekStart(): string {
+  const now = new Date();
+  const day = (now.getDay() + 6) % 7; // 0 = Monday
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - day);
+  return monday.toISOString().slice(0, 10);
+}
+function currentMonthStart(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
 habitsRouter.get("/", (req, res) => {
   const includeArchived = req.query.includeArchived === "true";
   const habits = db
     .prepare(`SELECT * FROM habits ${includeArchived ? "" : "WHERE archived = 0"} ORDER BY created_at ASC`)
     .all() as any[];
   const today = new Date().toISOString().slice(0, 10);
+  const weekStart = currentWeekStart();
+  const monthStart = currentMonthStart();
   const withLogs = habits.map((h) => {
     const logs = db.prepare("SELECT date, amount FROM habit_logs WHERE habit_id = ? ORDER BY date DESC LIMIT 90").all(h.id) as {
       date: string;
@@ -39,9 +55,24 @@ habitsRouter.get("/", (req, res) => {
     const dates = logs.map((l) => l.date);
     const todayLog = logs.find((l) => l.date === today);
     const todayAmount = todayLog?.amount ?? 0;
-    const doneToday = h.target_count ? todayAmount >= h.target_count : !!todayLog;
+
+    let periodProgress: { completed: number; target: number; label: string } | null = null;
+    if (h.frequency === "weekly") {
+      const completed = logs.filter((l) => l.date >= weekStart).length;
+      periodProgress = { completed, target: h.target_per_period ?? 1, label: "this week" };
+    } else if (h.frequency === "monthly") {
+      const completed = logs.filter((l) => l.date >= monthStart).length;
+      periodProgress = { completed, target: h.target_per_period ?? 1, label: "this month" };
+    }
+
+    const doneToday = periodProgress
+      ? periodProgress.completed >= periodProgress.target
+      : h.target_count
+        ? todayAmount >= h.target_count
+        : !!todayLog;
+
     let deadlineStatus: "ok" | "due-soon" | "missed" | null = null;
-    if (h.deadline_time && !doneToday) {
+    if (h.deadline_time && !doneToday && !periodProgress) {
       const [hh, mm] = h.deadline_time.split(":").map(Number);
       const now = new Date();
       const deadline = new Date(now);
@@ -56,26 +87,31 @@ habitsRouter.get("/", (req, res) => {
       totalCompletions: dates.length,
       todayAmount,
       doneToday,
+      loggedToday: !!todayLog,
       deadlineStatus,
+      periodProgress,
     };
   });
   res.json(withLogs);
 });
 
 habitsRouter.post("/", (req, res) => {
-  const { title, frequency, targetPerPeriod, deadlineTime, targetCount, unit } = req.body ?? {};
+  const { title, frequency, targetPerPeriod, deadlineTime, targetCount, unit, goalId } = req.body ?? {};
   if (!title) return res.status(400).json({ error: "title required" });
   const id = randomUUID();
   db.prepare(
-    "INSERT INTO habits (id, title, frequency, target_per_period, deadline_time, target_count, unit, created_at) VALUES (?,?,?,?,?,?,?,?)"
-  ).run(id, title, frequency ?? "daily", targetPerPeriod ?? 1, deadlineTime ?? null, targetCount ?? null, unit ?? null, new Date().toISOString());
+    "INSERT INTO habits (id, title, frequency, target_per_period, deadline_time, target_count, unit, goal_id, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
+  ).run(
+    id, title, frequency ?? "daily", targetPerPeriod ?? 1, deadlineTime ?? null, targetCount ?? null, unit ?? null, goalId ?? null,
+    new Date().toISOString()
+  );
   res.status(201).json(db.prepare("SELECT * FROM habits WHERE id = ?").get(id));
 });
 
 habitsRouter.patch("/:id", (req, res) => {
   const existing = db.prepare("SELECT * FROM habits WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "not found" });
-  const { title, frequency, targetPerPeriod, deadlineTime, targetCount, unit, archived } = req.body ?? {};
+  const { title, frequency, targetPerPeriod, deadlineTime, targetCount, unit, archived, goalId } = req.body ?? {};
   db.prepare(
     `UPDATE habits SET
       title = COALESCE(?, title),
@@ -84,7 +120,8 @@ habitsRouter.patch("/:id", (req, res) => {
       deadline_time = ?,
       target_count = ?,
       unit = ?,
-      archived = COALESCE(?, archived)
+      archived = COALESCE(?, archived),
+      goal_id = ?
      WHERE id = ?`
   ).run(
     title ?? null,
@@ -94,6 +131,7 @@ habitsRouter.patch("/:id", (req, res) => {
     targetCount !== undefined ? targetCount : (existing as any).target_count,
     unit !== undefined ? unit : (existing as any).unit,
     archived === undefined ? null : archived ? 1 : 0,
+    goalId !== undefined ? goalId : (existing as any).goal_id,
     req.params.id
   );
   res.json(db.prepare("SELECT * FROM habits WHERE id = ?").get(req.params.id));

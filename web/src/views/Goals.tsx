@@ -91,6 +91,16 @@ function GoalCard({ goal, invalidate }: { goal: any; invalidate: () => void }) {
           />
         </form>
       </div>
+
+      {(goal.habits ?? []).length > 0 && (
+        <div className="pt-1 flex flex-wrap gap-1.5">
+          {goal.habits.map((h: any) => (
+            <span key={h.id} className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
+              {h.title}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
