@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api";
+import { api, ApiError } from "../api";
+import { useToastStore } from "../toastStore";
 
 export function AICommandBar() {
   const [open, setOpen] = useState(false);
@@ -9,6 +10,7 @@ export function AICommandBar() {
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
+  const toast = useToastStore((s) => s.push);
 
   const { data: pendingActions = [] } = useQuery({
     queryKey: ["ai-actions", "pending"],
@@ -103,7 +105,11 @@ export function AICommandBar() {
                 <div className="flex gap-1 shrink-0">
                   <button
                     onClick={async () => {
-                      await api.ai.approveAction(a.id);
+                      try {
+                        await api.ai.approveAction(a.id);
+                      } catch (e) {
+                        toast(e instanceof ApiError ? e.message : "Couldn't complete that action");
+                      }
                       invalidateAfterAction();
                     }}
                     className="px-2 py-0.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"

@@ -121,6 +121,75 @@ export const tools = {
     db.prepare("INSERT OR IGNORE INTO task_dependencies (task_id, blocks_task_id) VALUES (?,?)").run(args.taskId, args.blocksTaskId);
     return { ok: true };
   },
+  create_habit(args: { title: string; frequency?: string; targetPerPeriod?: number; deadlineTime?: string; targetCount?: number; unit?: string }) {
+    const id = randomUUID();
+    db.prepare(
+      "INSERT INTO habits (id, title, frequency, target_per_period, deadline_time, target_count, unit, created_at) VALUES (?,?,?,?,?,?,?,?)"
+    ).run(
+      id, args.title, args.frequency ?? "daily", args.targetPerPeriod ?? 1, args.deadlineTime ?? null, args.targetCount ?? null,
+      args.unit ?? null, new Date().toISOString()
+    );
+    return db.prepare("SELECT * FROM habits WHERE id = ?").get(id);
+  },
+  // "By title" edit tools exist so the LLM can edit something by name instead of needing a
+  // real ID it has no way to know — same fuzzy-match-by-title approach the deterministic
+  // "complete <title>" parser already uses. Deliberately no delete_*_by_title counterpart for
+  // any of these: the AI can create and edit, never delete, regardless of approval mode.
+  update_task_by_title(args: { title: string; changes: { title?: string; notes?: string; priority?: string; dueDate?: string } }) {
+    const match = db.prepare("SELECT id FROM tasks WHERE title LIKE ? AND status != 'done' AND deleted_at IS NULL LIMIT 2").all(`%${args.title}%`) as any[];
+    if (match.length === 0) throw new Error(`no task matching "${args.title}"`);
+    if (match.length > 1) throw new Error(`multiple tasks match "${args.title}" — be more specific`);
+    return tools.update_task({ taskId: match[0].id, ...args.changes });
+  },
+  update_habit_by_title(args: { title: string; changes: { title?: string; frequency?: string; targetPerPeriod?: number; deadlineTime?: string; targetCount?: number; unit?: string } }) {
+    const match = db.prepare("SELECT id FROM habits WHERE title LIKE ? AND archived = 0 LIMIT 2").all(`%${args.title}%`) as any[];
+    if (match.length === 0) throw new Error(`no habit matching "${args.title}"`);
+    if (match.length > 1) throw new Error(`multiple habits match "${args.title}" — be more specific`);
+    const id = match[0].id;
+    const c = args.changes ?? {};
+    db.prepare(
+      `UPDATE habits SET
+        title = COALESCE(?, title), frequency = COALESCE(?, frequency), target_per_period = COALESCE(?, target_per_period),
+        deadline_time = COALESCE(?, deadline_time), target_count = COALESCE(?, target_count), unit = COALESCE(?, unit)
+       WHERE id = ?`
+    ).run(c.title ?? null, c.frequency ?? null, c.targetPerPeriod ?? null, c.deadlineTime ?? null, c.targetCount ?? null, c.unit ?? null, id);
+    return db.prepare("SELECT * FROM habits WHERE id = ?").get(id);
+  },
+  update_goal_by_title(args: { title: string; changes: { title?: string; progress?: number; status?: string; targetDate?: string } }) {
+    const match = db.prepare("SELECT id FROM goals WHERE title LIKE ? AND status != 'abandoned' LIMIT 2").all(`%${args.title}%`) as any[];
+    if (match.length === 0) throw new Error(`no goal matching "${args.title}"`);
+    if (match.length > 1) throw new Error(`multiple goals match "${args.title}" — be more specific`);
+    const id = match[0].id;
+    const c = args.changes ?? {};
+    db.prepare(
+      `UPDATE goals SET title = COALESCE(?, title), progress = COALESCE(?, progress), status = COALESCE(?, status),
+        target_date = COALESCE(?, target_date), updated_at = ? WHERE id = ?`
+    ).run(c.title ?? null, c.progress ?? null, c.status ?? null, c.targetDate ?? null, new Date().toISOString(), id);
+    return db.prepare("SELECT * FROM goals WHERE id = ?").get(id);
+  },
+  update_project_by_title(args: { title: string; changes: { name?: string; color?: string; description?: string } }) {
+    const match = db.prepare("SELECT id FROM projects WHERE name LIKE ? AND is_archived = 0 AND deleted_at IS NULL LIMIT 2").all(`%${args.title}%`) as any[];
+    if (match.length === 0) throw new Error(`no project matching "${args.title}"`);
+    if (match.length > 1) throw new Error(`multiple projects match "${args.title}" — be more specific`);
+    const id = match[0].id;
+    const c = args.changes ?? {};
+    db.prepare(
+      `UPDATE projects SET name = COALESCE(?, name), color = COALESCE(?, color), description = COALESCE(?, description),
+        updated_at = ? WHERE id = ?`
+    ).run(c.name ?? null, c.color ?? null, c.description ?? null, new Date().toISOString(), id);
+    return db.prepare("SELECT * FROM projects WHERE id = ?").get(id);
+  },
+  update_note_by_title(args: { title: string; changes: { title?: string; body?: string } }) {
+    const match = db.prepare("SELECT id FROM notes WHERE title LIKE ? AND deleted_at IS NULL LIMIT 2").all(`%${args.title}%`) as any[];
+    if (match.length === 0) throw new Error(`no note matching "${args.title}"`);
+    if (match.length > 1) throw new Error(`multiple notes match "${args.title}" — be more specific`);
+    const id = match[0].id;
+    const c = args.changes ?? {};
+    db.prepare(`UPDATE notes SET title = COALESCE(?, title), body = COALESCE(?, body), updated_at = ? WHERE id = ?`).run(
+      c.title ?? null, c.body ?? null, new Date().toISOString(), id
+    );
+    return db.prepare("SELECT * FROM notes WHERE id = ?").get(id);
+  },
 } as const;
 
 export type ToolName = keyof typeof tools;

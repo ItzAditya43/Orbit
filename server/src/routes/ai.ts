@@ -57,9 +57,18 @@ aiRouter.post("/actions/:id/approve", (req, res) => {
   const action: any = db.prepare("SELECT * FROM ai_actions WHERE id = ?").get(req.params.id);
   if (!action) return res.status(404).json({ error: "not found" });
   const args = JSON.parse(action.args_json || "{}");
-  const result = runTool(action.tool_name, args);
-  db.prepare("UPDATE ai_actions SET status = 'executed', result_json = ? WHERE id = ?").run(JSON.stringify(result), action.id);
-  res.json({ ok: true, result });
+  // Fuzzy-match-by-title tools (see aiTools.ts) throw when a suggested edit no longer
+  // resolves to exactly one entity — without this, that exception would crash the request
+  // unhandled and leave the action permanently stuck "pending" with no way to dismiss it.
+  try {
+    const result = runTool(action.tool_name, args);
+    db.prepare("UPDATE ai_actions SET status = 'executed', result_json = ? WHERE id = ?").run(JSON.stringify(result), action.id);
+    res.json({ ok: true, result });
+  } catch (e: any) {
+    const message = e?.message ?? "failed to execute";
+    db.prepare("UPDATE ai_actions SET status = 'failed', result_json = ? WHERE id = ?").run(JSON.stringify({ error: message }), action.id);
+    res.status(400).json({ ok: false, error: message });
+  }
 });
 
 aiRouter.post("/actions/:id/reject", (req, res) => {
@@ -70,16 +79,26 @@ aiRouter.post("/actions/:id/reject", (req, res) => {
 // LLM-issued tool calls are restricted to tools that don't need an existing entity's ID —
 // the model has no grounding to know real task/project IDs, so anything requiring one
 // (complete_task, update_task, move_task, etc.) stays deterministic-parser-only.
+// get_today/get_available_time were dropped from this list after live testing: the model
+// kept reaching for them on plain unrelated questions ("why is sleep important" -> get_today),
+// giving a useless answer instead of actually replying. Both are already covered reliably by
+// the deterministic parser's own phrases ("plan my day", "how much time do I have").
 const LLM_SAFE_TOOLS: ToolName[] = [
   "create_task",
   "capture_idea",
   "start_focus_session",
   "create_project",
   "create_calendar_event",
+  "create_habit",
+  "update_task_by_title",
+  "update_habit_by_title",
+  "update_goal_by_title",
+  "update_project_by_title",
+  "update_note_by_title",
   "search_notes",
-  "get_today",
-  "get_available_time",
 ];
+// No delete_* tool is ever in this list, and none ever will be — the AI can create and edit,
+// never delete, no matter what permission mode or approval state is in play.
 
 // POST /api/ai/command  { text: "add task buy milk tomorrow" }
 //
@@ -134,11 +153,30 @@ async function askOllama(host: string, text: string): Promise<any | null> {
         {
           role: "system",
           content:
-            "You are Orbit's assistant, a local productivity app. If the user clearly wants one of these " +
-            "actions taken, respond ONLY with strict JSON: " +
-            `{"tool": <one of ${LLM_SAFE_TOOLS.join(", ")}>, "args": {...}}. ` +
-            "For create_task, args are {title, dueDate?} with dueDate as YYYY-MM-DD. Otherwise, or if you're " +
-            "unsure, just answer directly and briefly (2-3 sentences max) as JSON: " +
+            "You are Orbit's assistant, a local productivity app. Only use a tool call when the user is " +
+            "directly asking you to create, add, start, or do something concrete right now. Any question, " +
+            "request for information/advice/opinion, or general conversation is always a reply, never a tool " +
+            'call — e.g. "why is sleep important" is a reply, NOT get_today. If in doubt, reply.\n' +
+            "If the user clearly wants one of these actions taken, respond ONLY with strict JSON: " +
+            `{"tool": <one of ${LLM_SAFE_TOOLS.join(", ")}>, "args": {...}}.\n` +
+            "create_task args: {title, dueDate?} — dueDate as YYYY-MM-DD.\n" +
+            'create_habit args: {title, frequency?, deadlineTime?, targetCount?, unit?} — use this for recurring ' +
+            'habits/routines ("make a habit of X", "I want to do X every day/week"). frequency is "daily" ' +
+            '(default), "weekly", or "monthly". deadlineTime is a 24-hour "HH:MM" if they mention a specific ' +
+            'time (e.g. "at 7pm" -> "19:00"). If they mention a number/quantity to hit (e.g. "drink 8 glasses ' +
+            'of water", "read 20 pages"), put the number in targetCount and the unit in unit, and keep title ' +
+            'short (e.g. title "Drink water", targetCount 8, unit "glasses" — NOT title "Drink 8 glasses of ' +
+            'water"). Leave targetCount/unit unset entirely for a plain done/not-done habit.\n' +
+            "To edit/change/update ANYTHING that already exists (a habit, task, goal, project, or note), you " +
+            "MUST respond with a tool call, never a reply — you cannot actually change anything by just saying " +
+            'you did in a reply, that would be a lie. Use update_task_by_title / update_habit_by_title / ' +
+            'update_goal_by_title / update_project_by_title / update_note_by_title with args {title: ' +
+            '"<enough of its existing name/title to identify it>", changes: {...only the fields to change...}} ' +
+            '— e.g. "change my shower habit to 8pm" -> {"tool": "update_habit_by_title", "args": {"title": ' +
+            '"shower", "changes": {"deadlineTime": "20:00"}}}. Never invent an id. There is no delete tool ' +
+            "available to you — if the user asks to delete/remove something, tell them to do it from the " +
+            "relevant page themselves.\n" +
+            "Otherwise, or if you're unsure, just answer directly and briefly (2-3 sentences max) as JSON: " +
             '{"reply": "<your answer>"}. You do not have access to their existing tasks/data beyond what a ' +
             "tool call returns. Never include prose outside the JSON object, never use markdown fences.",
         },
