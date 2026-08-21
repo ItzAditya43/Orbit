@@ -76,12 +76,26 @@ export default function Today() {
   const focusToday = focusSessions.filter((s: any) => s.was_completed && (s.started_at ?? "").slice(0, 10) === todayStr);
   const focusMinutes = focusToday.reduce((sum: number, s: any) => sum + (s.planned_minutes ?? 25), 0);
 
-  const frog = [...open].sort((a, b) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority])[0];
+  const { data: checkin } = useQuery({ queryKey: ["checkins", "today"], queryFn: api.checkins.today });
+
+  // When today's logged energy is low, surface a low-energy task instead of blindly picking
+  // the highest priority one — "eat the frog" assumes you have the energy to eat a frog.
+  // Tasks already carry an optional energy field; this is the first place it's actually used
+  // for anything instead of just being stored.
+  const currentEnergyLevel: "low" | "medium" | "high" | null =
+    checkin?.energy == null ? null : checkin.energy <= 2 ? "low" : checkin.energy >= 4 ? "high" : "medium";
+  const frog = [...open].sort((a, b) => {
+    if (currentEnergyLevel) {
+      const aMatch = a.energy === currentEnergyLevel ? 1 : 0;
+      const bMatch = b.energy === currentEnergyLevel ? 1 : 0;
+      if (aMatch !== bMatch) return bMatch - aMatch;
+    }
+    return PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority];
+  })[0];
   // Quantity habits (e.g. "8 glasses") stay visible while under target even after a partial
   // log today — everything else (plain daily, or weekly/monthly period habits) drops off
   // once logged today since there's nothing more to do on it until tomorrow.
   const habitsDueToday = habits.filter((h: any) => h.dueToday !== false && !h.doneToday && (h.target_count ? true : !h.loggedToday));
-  const { data: checkin } = useQuery({ queryKey: ["checkins", "today"], queryFn: api.checkins.today });
 
   const autoSchedule = async () => {
     const res = await api.tasks.autoSchedule(todayStr);
@@ -89,66 +103,8 @@ export default function Today() {
     toast(`Scheduled ${res.scheduled.length} tasks into today's free time`);
   };
 
-  return (
-    <div className="max-w-2xl mx-auto p-8 space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{greeting()}</h1>
-          <p className="text-sm text-neutral-400 mt-0.5">
-            {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
-          </p>
-        </div>
-        <button onClick={() => window.print()} className="no-print text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
-          Print agenda
-        </button>
-      </div>
-
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 bg-white dark:bg-neutral-900">
-          <p className="text-xl font-semibold">{open.length}</p>
-          <p className="text-[11px] text-neutral-400">Left today</p>
-        </div>
-        <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 bg-white dark:bg-neutral-900">
-          <p className="text-xl font-semibold">{done.length}</p>
-          <p className="text-[11px] text-neutral-400">Completed</p>
-        </div>
-        <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 bg-white dark:bg-neutral-900">
-          <p className="text-xl font-semibold">{focusMinutes}m</p>
-          <p className="text-[11px] text-neutral-400">Focused today</p>
-        </div>
-      </div>
-
-      {total > 0 && (
-        <div className="h-1.5 w-full rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-          <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${pct}%` }} />
-        </div>
-      )}
-
-      {frog && (
-        <div className="flex items-center gap-3 rounded-xl border border-neutral-900 dark:border-white p-3">
-          <TargetIcon size={16} className="shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] uppercase tracking-wide text-neutral-400">Eat the frog first</p>
-            <p className="text-sm font-medium truncate">{frog.title}</p>
-          </div>
-          <button
-            onClick={autoSchedule}
-            className="text-xs px-2.5 py-1 rounded-lg border border-neutral-200 dark:border-neutral-800 shrink-0 flex items-center gap-1"
-          >
-            <ZapIcon size={12} /> Auto-schedule day
-          </button>
-        </div>
-      )}
-
-      {staleTasks.length > 0 && (
-        <Link
-          to="/filters"
-          className="block text-xs px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 hover:underline"
-        >
-          {staleTasks.length} task{staleTasks.length === 1 ? "" : "s"} have sat with no due date for 30+ days — review
-        </Link>
-      )}
-
+  const sidebar = (
+    <>
       {habitsDueToday.length > 0 && (
         <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 space-y-1.5">
           <p className="text-[10px] uppercase tracking-wide text-neutral-400 flex items-center gap-1">
@@ -192,7 +148,7 @@ export default function Today() {
 
       <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 space-y-2">
         <p className="text-[10px] uppercase tracking-wide text-neutral-400">How are you feeling today?</p>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-1">
             <span className="text-xs text-neutral-400 w-12">Mood</span>
             {[1, 2, 3, 4, 5].map((n) => (
@@ -255,52 +211,126 @@ export default function Today() {
           </label>
         </div>
       </div>
+    </>
+  );
 
-      <QuickAdd onAdd={onAdd} placeholder="Add a task for today..." />
-      {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
-
-      {open.length > 0 && (
-        <div className="flex justify-end">
-          <button onClick={() => setSelectMode((s) => !s)} className="text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
-            {selectMode ? "Done selecting" : "Select"}
-          </button>
+  return (
+    <div className="max-w-2xl xl:max-w-6xl 2xl:max-w-7xl mx-auto p-8 space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{greeting()}</h1>
+          <p className="text-sm text-neutral-400 mt-0.5">
+            {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+          </p>
         </div>
-      )}
-
-      <div className="space-y-2">
-        {open.map((t) => (
-          <TaskRow
-            key={t.id}
-            task={t}
-            onToggle={onToggle}
-            onDelete={onDelete}
-            selectMode={selectMode}
-            selected={selectedIds.includes(t.id)}
-            onToggleSelect={toggleSelect}
-          />
-        ))}
-        {open.length === 0 && !isLoading && done.length === 0 && (
-          <EmptyState
-            icon={SunIcon}
-            title="Nothing planned for today"
-            subtitle="Add a task above, or capture something in your Inbox to sort out later."
-            actionLabel="Quick add a task"
-            onAction={openQuickAdd}
-          />
-        )}
-        {open.length === 0 && !isLoading && done.length > 0 && (
-          <EmptyState icon={CircleCheckIcon} title="All done for today" subtitle="Nice work — everything on today's list is complete." />
-        )}
+        <button onClick={() => window.print()} className="no-print text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
+          Print agenda
+        </button>
       </div>
 
-      {done.length > 0 && (
-        <div className="pt-4 space-y-2">
-          <p className="text-xs uppercase tracking-wide text-neutral-400">Completed</p>
-          {done.map((t) => (
-            <TaskRow key={t.id} task={t} onToggle={onToggle} onDelete={onDelete} />
-          ))}
+      <div className="xl:grid xl:grid-cols-[1fr_320px] xl:gap-6 xl:items-start">
+        <div className="space-y-6 min-w-0">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 bg-white dark:bg-neutral-900">
+              <p className="text-xl font-semibold">{open.length}</p>
+              <p className="text-[11px] text-neutral-400">Left today</p>
+            </div>
+            <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 bg-white dark:bg-neutral-900">
+              <p className="text-xl font-semibold">{done.length}</p>
+              <p className="text-[11px] text-neutral-400">Completed</p>
+            </div>
+            <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 bg-white dark:bg-neutral-900">
+              <p className="text-xl font-semibold">{focusMinutes}m</p>
+              <p className="text-[11px] text-neutral-400">Focused today</p>
+            </div>
+          </div>
+
+          {total > 0 && (
+            <div className="h-1.5 w-full rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+              <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${pct}%` }} />
+            </div>
+          )}
+
+          {frog && (
+            <div className="flex items-center gap-3 rounded-xl border border-neutral-900 dark:border-white p-3">
+              <TargetIcon size={16} className="shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] uppercase tracking-wide text-neutral-400">
+                  {currentEnergyLevel && frog.energy === currentEnergyLevel
+                    ? `Matches your ${currentEnergyLevel} energy today`
+                    : "Eat the frog first"}
+                </p>
+                <p className="text-sm font-medium truncate">{frog.title}</p>
+              </div>
+              <button
+                onClick={autoSchedule}
+                className="text-xs px-2.5 py-1 rounded-lg border border-neutral-200 dark:border-neutral-800 shrink-0 flex items-center gap-1"
+              >
+                <ZapIcon size={12} /> Auto-schedule day
+              </button>
+            </div>
+          )}
+
+          {staleTasks.length > 0 && (
+            <Link
+              to="/filters"
+              className="block text-xs px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 hover:underline"
+            >
+              {staleTasks.length} task{staleTasks.length === 1 ? "" : "s"} have sat with no due date for 30+ days — review
+            </Link>
+          )}
+
+          <div className="xl:hidden space-y-6">{sidebar}</div>
+
+          <QuickAdd onAdd={onAdd} placeholder="Add a task for today..." />
+          {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
+
+          {open.length > 0 && (
+            <div className="flex justify-end">
+              <button onClick={() => setSelectMode((s) => !s)} className="text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
+                {selectMode ? "Done selecting" : "Select"}
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {open.map((t) => (
+              <TaskRow
+                key={t.id}
+                task={t}
+                onToggle={onToggle}
+                onDelete={onDelete}
+                selectMode={selectMode}
+                selected={selectedIds.includes(t.id)}
+                onToggleSelect={toggleSelect}
+              />
+            ))}
+            {open.length === 0 && !isLoading && done.length === 0 && (
+              <EmptyState
+                icon={SunIcon}
+                title="Nothing planned for today"
+                subtitle="Add a task above, or capture something in your Inbox to sort out later."
+                actionLabel="Quick add a task"
+                onAction={openQuickAdd}
+              />
+            )}
+            {open.length === 0 && !isLoading && done.length > 0 && (
+              <EmptyState icon={CircleCheckIcon} title="All done for today" subtitle="Nice work — everything on today's list is complete." />
+            )}
+          </div>
+
+          {done.length > 0 && (
+            <div className="pt-4 space-y-2">
+              <p className="text-xs uppercase tracking-wide text-neutral-400">Completed</p>
+              {done.map((t) => (
+                <TaskRow key={t.id} task={t} onToggle={onToggle} onDelete={onDelete} />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+
+        <div className="hidden xl:block space-y-6 sticky top-8">{sidebar}</div>
+      </div>
 
       <BulkActionBar selectedIds={selectedIds} onDone={exitSelectMode} />
     </div>

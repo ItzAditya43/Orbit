@@ -24,7 +24,7 @@ export default function ProjectHub() {
   const doneTasks = tasks.filter((t) => t.status === "done");
 
   return (
-    <div className="max-w-3xl mx-auto p-8 space-y-8">
+    <div className="max-w-3xl xl:max-w-4xl 2xl:max-w-5xl mx-auto p-8 space-y-8">
       <div>
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full" style={{ background: project?.color ?? "#999" }} />

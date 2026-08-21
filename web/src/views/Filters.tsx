@@ -52,7 +52,7 @@ export default function Filters() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-8 space-y-6">
+    <div className="max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto p-8 space-y-6">
       <h1 className="text-xl font-semibold">Filters</h1>
 
       {savedFilters.length > 0 && (

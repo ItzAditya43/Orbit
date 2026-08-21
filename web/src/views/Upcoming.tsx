@@ -29,7 +29,7 @@ export default function Upcoming() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-8 space-y-6">
+    <div className="max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto p-8 space-y-6">
       <h1 className="text-xl font-semibold">Upcoming</h1>
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
       {[...byDate.entries()].map(([date, items]) => (

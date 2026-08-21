@@ -23,7 +23,7 @@ export default function Projects() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-8 space-y-6">
+    <div className="max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto p-8 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Projects</h1>
         {archived.length > 0 && (
@@ -85,7 +85,7 @@ export default function Projects() {
       {projects.length === 0 && !isLoading ? (
         <EmptyState icon={FolderIcon} title="No projects yet" subtitle="Group related tasks into a project to track progress and see it on the kanban board." />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
           {projects.map((p) => {
             const total = (p.open_task_count ?? 0) + (p.done_task_count ?? 0);
             const pct = total > 0 ? Math.round(((p.done_task_count ?? 0) / total) * 100) : 0;

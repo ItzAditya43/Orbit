@@ -100,7 +100,7 @@ export default function Settings() {
   if (!local) return <div className="p-8 text-sm text-neutral-400">Loading...</div>;
 
   return (
-    <div className="max-w-2xl mx-auto p-8 space-y-8">
+    <div className="max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto p-8 space-y-8">
       <h1 className="text-xl font-semibold">Settings</h1>
 
       <section className="space-y-3">

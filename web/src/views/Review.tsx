@@ -8,7 +8,7 @@ export default function Review() {
   const { data: weekly, isLoading: loadingWeekly } = useQuery({ queryKey: ["review", "weekly"], queryFn: api.review.weekly, enabled: tab === "weekly" });
 
   return (
-    <div className="max-w-2xl mx-auto p-8 space-y-6">
+    <div className="max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto p-8 space-y-6">
       <h1 className="text-xl font-semibold">Review</h1>
       <div className="flex rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden text-xs w-fit">
         {(["daily", "weekly"] as const).map((t) => (

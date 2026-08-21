@@ -34,7 +34,7 @@ export default function HabitMatrix() {
   const bucket = (urgent: boolean, important: boolean) => active.filter((h: any) => isHabitUrgent(h) === urgent && isHabitImportant(h) === important);
 
   return (
-    <div className="max-w-4xl mx-auto p-8 space-y-6">
+    <div className="max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto p-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Habit Matrix</h1>

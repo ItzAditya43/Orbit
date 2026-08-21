@@ -56,7 +56,7 @@ export default function ProjectDetail() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-8 space-y-6">
+    <div className="max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto p-8 space-y-6">
       <Link to="/projects" className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200">
         <ArrowLeftIcon size={13} /> Projects
       </Link>

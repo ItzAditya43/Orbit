@@ -40,7 +40,7 @@ export default function Search() {
     q && tasks.length === 0 && notes.length === 0 && habits.length === 0 && goals.length === 0 && projects.length === 0 && !isFetching;
 
   return (
-    <div className="max-w-2xl mx-auto p-8 space-y-6">
+    <div className="max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto p-8 space-y-6">
       <h1 className="text-xl font-semibold">Search</h1>
       <input
         autoFocus

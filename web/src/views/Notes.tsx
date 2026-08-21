@@ -161,7 +161,7 @@ export default function Notes() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-8 space-y-6">
+    <div className="max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto p-8 space-y-6">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">Notes</h1>
         <div className="relative w-56">
@@ -226,7 +226,7 @@ export default function Notes() {
           subtitle={search ? "Try a different search term." : "Jot down an idea, meeting notes, or anything worth keeping."}
         />
       ) : (
-        <div className="columns-1 sm:columns-2 md:columns-3 gap-3">
+        <div className="columns-1 sm:columns-2 md:columns-3 xl:columns-4 2xl:columns-5 gap-3">
           {notes.map((n: any) => (
             <NoteCard key={n.id} note={n} invalidate={invalidate} />
           ))}

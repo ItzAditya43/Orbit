@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api";
 import { TimeField } from "../components/TimeField";
+import { Heatmap } from "../components/Heatmap";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -185,6 +186,7 @@ function scheduleLabel(h: any): string | null {
 
 function HabitCard({ habit: h, goals, invalidate }: { habit: any; goals: any[]; invalidate: () => void }) {
   const [editing, setEditing] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const [form, setForm] = useState<HabitFormState>(() => formStateFromHabit(h));
 
   const isQuantity = !!h.target_count;
@@ -216,7 +218,7 @@ function HabitCard({ habit: h, goals, invalidate }: { habit: any; goals: any[]; 
 
   return (
     <div
-      className={`flex items-center justify-between rounded-lg border p-3 ${
+      className={`rounded-lg border p-3 space-y-2 ${
         h.deadlineStatus === "missed"
           ? "border-red-300 dark:border-red-900"
           : h.deadlineStatus === "due-soon"
@@ -224,6 +226,7 @@ function HabitCard({ habit: h, goals, invalidate }: { habit: any; goals: any[]; 
             : "border-neutral-200 dark:border-neutral-800"
       } ${!h.dueToday ? "opacity-60" : ""}`}
     >
+    <div className="flex items-center justify-between">
       <div>
         <p className="text-sm font-medium">{h.title}</p>
         <p className="text-xs text-neutral-400">
@@ -289,6 +292,9 @@ function HabitCard({ habit: h, goals, invalidate }: { habit: any; goals: any[]; 
               {h.loggedToday ? "Logged today" : "Log today"}
             </button>
           ))}
+        <button onClick={() => setShowHeatmap((v) => !v)} className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 text-xs">
+          streak
+        </button>
         <button
           onClick={() => {
             setForm(formStateFromHabit(h));
@@ -308,6 +314,10 @@ function HabitCard({ habit: h, goals, invalidate }: { habit: any; goals: any[]; 
           delete
         </button>
       </div>
+    </div>
+    {showHeatmap && (
+      <Heatmap data={(h.logs ?? []).map((l: any) => ({ date: l.date, count: l.amount }))} weeks={13} />
+    )}
     </div>
   );
 }
@@ -331,7 +341,7 @@ export default function Habits() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-8 space-y-6">
+    <div className="max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto p-8 space-y-6">
       <h1 className="text-xl font-semibold">Habits</h1>
       <form
         onSubmit={(e) => {

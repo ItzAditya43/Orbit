@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api";
+import { Heatmap } from "../components/Heatmap";
 
 function Bar({ label, value, max }: { label: string; value: number; max: number }) {
   const pct = max > 0 ? Math.max(4, Math.round((value / max) * 100)) : 0;
@@ -21,40 +22,6 @@ const RANGES = [
   { label: "90 days", days: 90 },
 ];
 
-function Heatmap({ completedByDay }: { completedByDay: { day: string; count: number }[] }) {
-  const countByDay = new Map(completedByDay.map((d) => [d.day, d.count]));
-  const days: string[] = [];
-  const today = new Date();
-  for (let i = 111; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    days.push(d.toISOString().slice(0, 10));
-  }
-  const max = Math.max(1, ...completedByDay.map((d) => d.count));
-  const shade = (count: number) => {
-    if (count === 0) return "bg-neutral-100 dark:bg-neutral-800";
-    const intensity = count / max;
-    if (intensity > 0.75) return "bg-emerald-600";
-    if (intensity > 0.5) return "bg-emerald-500";
-    if (intensity > 0.25) return "bg-emerald-400";
-    return "bg-emerald-300 dark:bg-emerald-700";
-  };
-  const weeks: string[][] = [];
-  for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
-
-  return (
-    <div className="flex gap-1 overflow-x-auto pb-1">
-      {weeks.map((week, wi) => (
-        <div key={wi} className="flex flex-col gap-1">
-          {week.map((day) => (
-            <div key={day} title={`${day}: ${countByDay.get(day) ?? 0} completed`} className={`h-2.5 w-2.5 rounded-sm ${shade(countByDay.get(day) ?? 0)}`} />
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function Analytics() {
   const [rangeDays, setRangeDays] = useState(14);
   const to = new Date().toISOString().slice(0, 10);
@@ -70,7 +37,7 @@ export default function Analytics() {
   const maxVelocity = Math.max(1, ...data.projectVelocity.map((p: any) => p.completed_count));
 
   return (
-    <div className="max-w-2xl mx-auto p-8 space-y-8">
+    <div className="max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto p-8 space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Analytics</h1>
         <div className="flex rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden text-xs">
@@ -128,7 +95,7 @@ export default function Analytics() {
       {heatmapData && (
         <div className="space-y-2">
           <p className="text-sm font-medium">Completion activity (16 weeks)</p>
-          <Heatmap completedByDay={heatmapData.completedByDay} />
+          <Heatmap data={heatmapData.completedByDay.map((d: any) => ({ date: d.day, count: d.count }))} />
         </div>
       )}
 

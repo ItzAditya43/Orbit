@@ -36,7 +36,7 @@ export default function Automations() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-8 space-y-8">
+    <div className="max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto p-8 space-y-8">
       <h1 className="text-xl font-semibold">Automations</h1>
 
       <form
