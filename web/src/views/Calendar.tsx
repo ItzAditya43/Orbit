@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
@@ -40,6 +40,10 @@ export default function Calendar() {
   const [anchor, setAnchor] = useState(new Date());
   const [modalDate, setModalDate] = useState<string | null>(null);
   const [editEvent, setEditEvent] = useState<any | null>(null);
+  const [showHabits, setShowHabits] = useState(true);
+  const [dayPopup, setDayPopup] = useState<string | null>(null);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressed = useRef(false);
 
   const rangeStart = view === "month" ? addDays(startOfWeek(startOfMonth(anchor)), 0) : startOfWeek(anchor);
   const daysToShow = view === "month" ? 42 : view === "week" || view === "timeline" ? 7 : 60;
@@ -56,12 +60,13 @@ export default function Calendar() {
   const byDay = useMemo(() => {
     const map = new Map<string, any[]>();
     for (const e of events) {
+      if (!showHabits && e.source === "habit") continue;
       const d = (e.starts_at ?? "").slice(0, 10);
       if (!map.has(d)) map.set(d, []);
       map.get(d)!.push(e);
     }
     return map;
-  }, [events]);
+  }, [events, showHabits]);
 
   const days = useMemo(() => Array.from({ length: view === "agenda" ? 0 : daysToShow }, (_, i) => addDays(rangeStart, i)), [rangeStart, daysToShow, view]);
 
@@ -177,6 +182,17 @@ export default function Calendar() {
             ))}
           </div>
           <button
+            onClick={() => setShowHabits((v) => !v)}
+            title="Toggle habits on the calendar"
+            className={`h-8 px-3 rounded-lg border text-xs ${
+              showHabits
+                ? "border-neutral-900 dark:border-white bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                : "border-neutral-200 dark:border-neutral-800 text-neutral-400"
+            }`}
+          >
+            Habits
+          </button>
+          <button
             onClick={() => setModalDate(key(new Date()))}
             className="h-8 px-3 flex items-center gap-1.5 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-xs font-medium"
           >
@@ -227,7 +243,26 @@ export default function Calendar() {
               return (
                 <div
                   key={key(d)}
-                  onClick={() => setModalDate(key(d))}
+                  onClick={() => {
+                    if (longPressed.current) {
+                      longPressed.current = false;
+                      return;
+                    }
+                    setModalDate(key(d));
+                  }}
+                  onMouseDown={() => {
+                    longPressed.current = false;
+                    pressTimer.current = setTimeout(() => {
+                      longPressed.current = true;
+                      setDayPopup(key(d));
+                    }, 450);
+                  }}
+                  onMouseUp={() => {
+                    if (pressTimer.current) clearTimeout(pressTimer.current);
+                  }}
+                  onMouseLeave={() => {
+                    if (pressTimer.current) clearTimeout(pressTimer.current);
+                  }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(ev) => {
                     ev.preventDefault();
@@ -437,6 +472,50 @@ export default function Calendar() {
 
       {modalDate && <CalendarEventModal date={modalDate} onClose={() => setModalDate(null)} />}
       {editEvent && <CalendarEventModal event={editEvent} onClose={() => setEditEvent(null)} />}
+
+      {dayPopup && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={() => setDayPopup(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl p-4 space-y-2 max-h-[70vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold">{new Date(dayPopup).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
+              <button onClick={() => setDayPopup(null)} className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 text-xs">
+                Close
+              </button>
+            </div>
+            {(byDay.get(dayPopup) ?? []).length === 0 ? (
+              <p className="text-xs text-neutral-400">Nothing this day.</p>
+            ) : (
+              ["task", "goal", "habit", "event"].map((src) => {
+                const items = (byDay.get(dayPopup) ?? []).filter((e: any) => e.source === src);
+                if (items.length === 0) return null;
+                return (
+                  <div key={src} className="space-y-1">
+                    <p className="text-[10px] uppercase tracking-wide text-neutral-400">{src}s</p>
+                    {items.map((e: any) => (
+                      <div key={e.id} className="flex items-center gap-2 text-sm px-2 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ background: eventColor(e) }} />
+                        <span className="flex-1 truncate">{e.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })
+            )}
+            <button
+              onClick={() => {
+                setModalDate(dayPopup);
+                setDayPopup(null);
+              }}
+              className="w-full text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800 text-neutral-500"
+            >
+              + Add event
+            </button>
+          </div>
+        </div>
+      )}
 
       {contextMenu && (
         <div className="fixed inset-0 z-[60]" onClick={() => setContextMenu(null)} onContextMenu={(ev) => ev.preventDefault()}>

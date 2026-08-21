@@ -228,7 +228,7 @@ export default function Today() {
         </button>
       </div>
 
-      <div className="xl:grid xl:grid-cols-[1fr_320px] xl:gap-6 xl:items-start">
+      <div className="xl:grid xl:grid-cols-[1fr_320px] xl:gap-6 xl:items-start xl:content-start">
         <div className="space-y-6 min-w-0">
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-3 bg-white dark:bg-neutral-900">
