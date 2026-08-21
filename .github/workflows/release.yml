@@ -1,0 +1,63 @@
+name: Release
+
+# Builds and publishes desktop artifacts on GitHub's own runners instead of locally — the
+# local Linux machine used for development hits an intermittent TLS-handshake block against
+# GitHub's binary-asset CDN (release-assets.githubusercontent.com / objects.githubusercontent.com)
+# when linuxdeploy/appimagetool try to download their own dependencies, which GitHub-hosted
+# runners never hit since they're on GitHub's own network. This also means Windows can be
+# built and code-signed for real, not cross-compiled and only smoke-tested under Wine.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            args: "--bundles appimage,deb,rpm"
+          - platform: windows-latest
+            args: "--bundles msi,nsis"
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf build-essential
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm install
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm install
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: web
+          tagName: ${{ github.ref_name }}
+          releaseName: "Orbit ${{ github.ref_name }}"
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
