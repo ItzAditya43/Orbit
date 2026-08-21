@@ -1,17 +1,27 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api, type Task } from "../api";
 
-// Classification is derived from real fields (priority + due date), not a separate flag —
-// dragging a task into a quadrant writes back the priority/due-date combination that
-// quadrant represents, so the matrix stays a live view of the same task data everywhere
-// else in the app, not a parallel system that can drift out of sync.
-function isUrgent(t: Task) {
+// Classification is derived from real fields (priority/due-date for tasks, horizon/target-date
+// for goals), not a separate flag — dragging an item into a quadrant writes back the field
+// combination that quadrant represents, so the matrix stays a live view of the same data
+// everywhere else in the app, not a parallel system that can drift out of sync.
+function isTaskUrgent(t: Task) {
   if (!t.due_date) return false;
   const today = new Date().toISOString().slice(0, 10);
   return t.due_date <= today;
 }
-function isImportant(t: Task) {
+function isTaskImportant(t: Task) {
   return t.priority === "high" || t.priority === "urgent";
+}
+const LONG_HORIZONS = new Set(["life", "annual", "semester"]);
+function isGoalUrgent(g: any) {
+  if (!g.target_date) return false;
+  const in7Days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  return g.target_date <= in7Days;
+}
+function isGoalImportant(g: any) {
+  return LONG_HORIZONS.has(g.horizon);
 }
 
 const QUADRANTS = [
@@ -24,32 +34,44 @@ const QUADRANTS = [
 export default function Matrix() {
   const qc = useQueryClient();
   const { data: tasks = [], isLoading } = useQuery({ queryKey: ["tasks", "open"], queryFn: () => api.tasks.list({ status: "open" }) });
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
+  const { data: goals = [] } = useQuery({ queryKey: ["goals"], queryFn: api.goals.list });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+    qc.invalidateQueries({ queryKey: ["goals"] });
+  };
 
-  const bucket = (urgent: boolean, important: boolean) =>
-    tasks.filter((t) => isUrgent(t) === urgent && isImportant(t) === important);
+  const bucketTasks = (urgent: boolean, important: boolean) => tasks.filter((t) => isTaskUrgent(t) === urgent && isTaskImportant(t) === important);
+  const bucketGoals = (urgent: boolean, important: boolean) => goals.filter((g: any) => isGoalUrgent(g) === urgent && isGoalImportant(g) === important);
 
-  const applyQuadrant = async (taskId: string, urgent: boolean, important: boolean) => {
+  const applyTaskQuadrant = async (taskId: string, urgent: boolean, important: boolean) => {
     const today = new Date().toISOString().slice(0, 10);
-    await api.tasks.update(taskId, {
-      priority: important ? "high" : "none",
-      dueDate: urgent ? today : null,
-    });
+    await api.tasks.update(taskId, { priority: important ? "high" : "none", dueDate: urgent ? today : null });
+    invalidate();
+  };
+  const applyGoalQuadrant = async (goalId: string, urgent: boolean, important: boolean) => {
+    const in3Days = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+    await api.goals.update(goalId, { horizon: important ? "annual" : "monthly", targetDate: urgent ? in3Days : null });
     invalidate();
   };
 
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">Priority Matrix</h1>
-        <p className="text-sm text-neutral-400 mt-0.5">
-          Drag a task into the quadrant it belongs in — it updates the task's priority and due date to match.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Task & Goal Matrix</h1>
+          <p className="text-sm text-neutral-400 mt-0.5">
+            Drag a task or goal into the quadrant it belongs in — updates its priority/due date (tasks) or horizon/target date (goals).
+          </p>
+        </div>
+        <Link to="/habit-matrix" className="text-xs text-neutral-400 hover:underline shrink-0">
+          Habit matrix →
+        </Link>
       </div>
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {QUADRANTS.map((q) => {
-          const items = bucket(q.urgent, q.important);
+          const taskItems = bucketTasks(q.urgent, q.important);
+          const goalItems = bucketGoals(q.urgent, q.important);
           return (
             <div
               key={q.key}
@@ -57,7 +79,9 @@ export default function Matrix() {
               onDrop={(e) => {
                 e.preventDefault();
                 const taskId = e.dataTransfer.getData("text/task-id");
-                if (taskId) applyQuadrant(taskId, q.urgent, q.important);
+                const goalId = e.dataTransfer.getData("text/goal-id");
+                if (taskId) applyTaskQuadrant(taskId, q.urgent, q.important);
+                if (goalId) applyGoalQuadrant(goalId, q.urgent, q.important);
               }}
               className={`rounded-xl border-2 ${q.accent} p-3 min-h-[160px] space-y-2`}
             >
@@ -66,7 +90,7 @@ export default function Matrix() {
                 <p className="text-[11px] text-neutral-400">{q.subtitle}</p>
               </div>
               <div className="space-y-1.5">
-                {items.map((t) => (
+                {taskItems.map((t) => (
                   <div
                     key={t.id}
                     draggable
@@ -77,7 +101,19 @@ export default function Matrix() {
                     {t.title}
                   </div>
                 ))}
-                {items.length === 0 && <p className="text-xs text-neutral-300 dark:text-neutral-700">Empty</p>}
+                {goalItems.map((g: any) => (
+                  <div
+                    key={g.id}
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData("text/goal-id", g.id)}
+                    className="text-sm px-2.5 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-900 cursor-grab active:cursor-grabbing truncate flex items-center gap-1.5"
+                    title={g.title}
+                  >
+                    <span className="text-[9px] uppercase tracking-wide text-violet-500 shrink-0">Goal</span>
+                    {g.title}
+                  </div>
+                ))}
+                {taskItems.length === 0 && goalItems.length === 0 && <p className="text-xs text-neutral-300 dark:text-neutral-700">Empty</p>}
               </div>
             </div>
           );

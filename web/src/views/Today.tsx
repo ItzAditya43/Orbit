@@ -80,7 +80,7 @@ export default function Today() {
   // Quantity habits (e.g. "8 glasses") stay visible while under target even after a partial
   // log today — everything else (plain daily, or weekly/monthly period habits) drops off
   // once logged today since there's nothing more to do on it until tomorrow.
-  const habitsDueToday = habits.filter((h: any) => !h.doneToday && (h.target_count ? true : !h.loggedToday));
+  const habitsDueToday = habits.filter((h: any) => h.dueToday !== false && !h.doneToday && (h.target_count ? true : !h.loggedToday));
   const { data: checkin } = useQuery({ queryKey: ["checkins", "today"], queryFn: api.checkins.today });
 
   const autoSchedule = async () => {

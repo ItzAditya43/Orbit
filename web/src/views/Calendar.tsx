@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { CalendarEventModal } from "../components/CalendarEventModal";
 import { EmptyState } from "../components/EmptyState";
@@ -34,6 +34,7 @@ function isToday(d: Date) {
 const PRIORITY_COLOR: Record<string, string> = { urgent: "#ef4444", high: "#f97316", medium: "#f59e0b", low: "#38bdf8" };
 
 export default function Calendar() {
+  const qc = useQueryClient();
   const [view, setView] = useState<ViewMode>("month");
   const [anchor, setAnchor] = useState(new Date());
   const [modalDate, setModalDate] = useState<string | null>(null);
@@ -69,6 +70,29 @@ export default function Calendar() {
   };
 
   const eventColor = (e: any) => e.color ?? (e.priority ? PRIORITY_COLOR[e.priority] : null) ?? "#a3a3a3";
+
+  // Only real, single-day-owned items can be dragged to a new day: events (their own
+  // startsAt/endsAt), tasks (dueDate), and goals (targetDate). Habits are recurring by rule
+  // (daily/custom days/every N days) — there's no single "the day" to drag them to, so they're
+  // excluded, same reasoning as why period-based habits don't show on the calendar at all.
+  const canDrag = (e: any) => e.source === "event" || e.source === "task" || e.source === "goal";
+  const rescheduleTo = async (e: any, newDay: string) => {
+    if (e.source === "task") {
+      await api.tasks.update(e.task_id, { dueDate: newDay });
+    } else if (e.source === "goal") {
+      await api.goals.update(e.goal_id, { targetDate: newDay });
+    } else if (e.source === "event") {
+      const startTime = e.starts_at?.slice(11, 16) ?? "00:00";
+      const endTime = e.ends_at?.slice(11, 16) ?? startTime;
+      await api.calendar.update(e.id, {
+        startsAt: new Date(`${newDay}T${startTime}:00`).toISOString(),
+        endsAt: new Date(`${newDay}T${endTime}:00`).toISOString(),
+      });
+    }
+    qc.invalidateQueries({ queryKey: ["calendar"] });
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+    qc.invalidateQueries({ queryKey: ["goals"] });
+  };
 
   const label =
     view === "month"
@@ -140,6 +164,12 @@ export default function Calendar() {
                 <div
                   key={key(d)}
                   onClick={() => setModalDate(key(d))}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(ev) => {
+                    ev.preventDefault();
+                    const raw = ev.dataTransfer.getData("application/json");
+                    if (raw) rescheduleTo(JSON.parse(raw), key(d));
+                  }}
                   className={`min-h-24 border-b border-r border-neutral-100 dark:border-neutral-900 p-1.5 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900/50 transition-colors ${
                     !inMonth ? "opacity-40" : ""
                   }`}
@@ -155,11 +185,16 @@ export default function Calendar() {
                     {dayEvents.slice(0, 3).map((e) => (
                       <button
                         key={e.id}
+                        draggable={canDrag(e)}
+                        onDragStart={(ev) => {
+                          ev.stopPropagation();
+                          ev.dataTransfer.setData("application/json", JSON.stringify(e));
+                        }}
                         onClick={(ev) => {
                           ev.stopPropagation();
                           if (e.source === "event") setEditEvent(e);
                         }}
-                        className="w-full text-left text-[10px] px-1 py-0.5 rounded truncate text-white"
+                        className={`w-full text-left text-[10px] px-1 py-0.5 rounded truncate text-white ${canDrag(e) ? "cursor-grab active:cursor-grabbing" : ""}`}
                         style={{ background: eventColor(e) }}
                         title={e.title}
                       >
@@ -182,6 +217,12 @@ export default function Calendar() {
             return (
               <div
                 key={key(d)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(ev) => {
+                  ev.preventDefault();
+                  const raw = ev.dataTransfer.getData("application/json");
+                  if (raw) rescheduleTo(JSON.parse(raw), key(d));
+                }}
                 className={`rounded-xl border p-2 min-h-48 ${
                   isToday(d) ? "border-neutral-900 dark:border-white" : "border-neutral-200 dark:border-neutral-800"
                 }`}
@@ -194,8 +235,10 @@ export default function Calendar() {
                   {dayEvents.map((e) => (
                     <button
                       key={e.id}
+                      draggable={canDrag(e)}
+                      onDragStart={(ev) => ev.dataTransfer.setData("application/json", JSON.stringify(e))}
                       onClick={() => e.source === "event" && setEditEvent(e)}
-                      className="w-full text-left text-[11px] px-1.5 py-1 rounded text-white truncate"
+                      className={`w-full text-left text-[11px] px-1.5 py-1 rounded text-white truncate ${canDrag(e) ? "cursor-grab active:cursor-grabbing" : ""}`}
                       style={{ background: eventColor(e) }}
                     >
                       {!e.all_day && e.starts_at && (
@@ -245,7 +288,7 @@ export default function Calendar() {
               </div>
             ))}
           {byDay.size === 0 && !isLoading && (
-            <EmptyState icon={CalendarOffIcon} title="Nothing on the calendar" subtitle="Events and scheduled tasks in the next 30 days will show up here." />
+            <EmptyState icon={CalendarOffIcon} title="Nothing on the calendar" subtitle="Events, scheduled tasks, due habits, and goal deadlines in the next 30 days will show up here." />
           )}
         </div>
       )}

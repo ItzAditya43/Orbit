@@ -2,14 +2,21 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { useToastStore } from "../toastStore";
+import { DateField } from "./DateField";
+import { TimeField } from "./TimeField";
 
 const EVENT_COLORS = ["#f87171", "#fb923c", "#fbbf24", "#4ade80", "#22d3ee", "#818cf8", "#c084fc", "#f472b6"];
 
-function toLocalInput(iso: string | null) {
-  if (!iso) return "";
+function splitLocal(iso: string | null) {
+  if (!iso) return { date: "", time: "" };
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+}
+function combineLocal(date: string, time: string): Date {
+  const [y, m, d] = date.split("-").map(Number);
+  const [hh, mm] = (time || "00:00").split(":").map(Number);
+  return new Date(y, m - 1, d, hh, mm);
 }
 
 export function CalendarEventModal({
@@ -26,12 +33,14 @@ export function CalendarEventModal({
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projects.list });
 
   const isEdit = !!event;
-  const defaultStart = event ? toLocalInput(event.starts_at) : `${date}T09:00`;
-  const defaultEnd = event ? toLocalInput(event.ends_at) : `${date}T10:00`;
+  const startSplit = event ? splitLocal(event.starts_at) : { date: date ?? "", time: "09:00" };
+  const endSplit = event ? splitLocal(event.ends_at) : { date: date ?? "", time: "10:00" };
 
   const [title, setTitle] = useState(event?.title ?? "");
-  const [start, setStart] = useState(defaultStart);
-  const [end, setEnd] = useState(defaultEnd);
+  const [startDate, setStartDate] = useState(startSplit.date);
+  const [startTime, setStartTime] = useState(startSplit.time);
+  const [endDate, setEndDate] = useState(endSplit.date);
+  const [endTime, setEndTime] = useState(endSplit.time);
   const [allDay, setAllDay] = useState(!!event?.all_day);
   const [color, setColor] = useState(event?.color ?? EVENT_COLORS[0]);
   const [location, setLocation] = useState(event?.location ?? "");
@@ -50,8 +59,8 @@ export function CalendarEventModal({
     if (!title.trim()) return;
     const body = {
       title: title.trim(),
-      startsAt: new Date(start).toISOString(),
-      endsAt: new Date(end).toISOString(),
+      startsAt: combineLocal(startDate, allDay ? "00:00" : startTime).toISOString(),
+      endsAt: combineLocal(endDate || startDate, allDay ? "23:59" : endTime).toISOString(),
       allDay,
       color,
       location: location || undefined,
@@ -106,21 +115,29 @@ export function CalendarEventModal({
           <div className="grid grid-cols-2 gap-2">
             <label className="text-xs text-neutral-500 space-y-1">
               <span>Starts</span>
-              <input
-                type={allDay ? "date" : "datetime-local"}
-                value={allDay ? start.slice(0, 10) : start}
-                onChange={(e) => setStart(allDay ? `${e.target.value}T00:00` : e.target.value)}
-                className="w-full rounded-lg border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-sm"
-              />
+              <div className="flex gap-1">
+                <DateField
+                  value={startDate || null}
+                  onChange={(v) => setStartDate(v ?? "")}
+                  className="flex-1 text-left rounded-lg border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-sm"
+                />
+                {!allDay && (
+                  <TimeField value={startTime} onChange={setStartTime} className="w-16 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-sm" />
+                )}
+              </div>
             </label>
             <label className="text-xs text-neutral-500 space-y-1">
               <span>Ends</span>
-              <input
-                type={allDay ? "date" : "datetime-local"}
-                value={allDay ? end.slice(0, 10) : end}
-                onChange={(e) => setEnd(allDay ? `${e.target.value}T23:59` : e.target.value)}
-                className="w-full rounded-lg border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-sm"
-              />
+              <div className="flex gap-1">
+                <DateField
+                  value={endDate || null}
+                  onChange={(v) => setEndDate(v ?? "")}
+                  className="flex-1 text-left rounded-lg border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-sm"
+                />
+                {!allDay && (
+                  <TimeField value={endTime} onChange={setEndTime} className="w-16 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-sm" />
+                )}
+              </div>
             </label>
           </div>
 

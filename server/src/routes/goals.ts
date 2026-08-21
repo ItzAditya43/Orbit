@@ -28,10 +28,20 @@ goalsRouter.post("/", (req, res) => {
 });
 
 goalsRouter.patch("/:id", (req, res) => {
-  const { progress, status, title, targetDate } = req.body ?? {};
+  const existing = db.prepare("SELECT * FROM goals WHERE id = ?").get(req.params.id) as any;
+  if (!existing) return res.status(404).json({ error: "not found" });
+  const { progress, status, title, targetDate, horizon } = req.body ?? {};
+  // targetDate uses explicit-vs-omitted (not COALESCE) so it can actually be cleared to null —
+  // e.g. the priority matrix clearing a goal's due date when dragged into a non-urgent quadrant.
   db.prepare(
-    `UPDATE goals SET progress = COALESCE(?, progress), status = COALESCE(?, status), title = COALESCE(?, title), target_date = COALESCE(?, target_date), updated_at = ? WHERE id = ?`
-  ).run(progress ?? null, status ?? null, title ?? null, targetDate ?? null, new Date().toISOString(), req.params.id);
+    `UPDATE goals SET progress = COALESCE(?, progress), status = COALESCE(?, status), title = COALESCE(?, title),
+      target_date = ?, horizon = COALESCE(?, horizon), updated_at = ? WHERE id = ?`
+  ).run(
+    progress ?? null, status ?? null, title ?? null,
+    targetDate !== undefined ? targetDate : existing.target_date,
+    horizon ?? null,
+    new Date().toISOString(), req.params.id
+  );
   res.json(hydrate(db.prepare("SELECT * FROM goals WHERE id = ?").get(req.params.id)));
 });
 

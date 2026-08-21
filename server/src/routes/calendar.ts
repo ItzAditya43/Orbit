@@ -46,9 +46,67 @@ calendarRouter.get("/", (req, res) => {
     source: "task",
   }));
 
+  // Habits with a clear per-day due-ness (daily / custom weekdays / every-N-days) get overlaid
+  // on the days they're actually due. Period-based habits (weekly/biweekly/monthly, tracked as
+  // "X times this period" rather than specific days) are deliberately left off — there's no
+  // single day that represents them, and showing them every day would just be noise.
+  const habits = db.prepare("SELECT * FROM habits WHERE archived = 0 AND frequency IN ('daily','custom_days','interval')").all() as any[];
+  const habitEvents: any[] = [];
+  if (from && to && habits.length) {
+    // Walked as UTC-midnight instants and read back via isoWeekday — never Date#getDay() on a
+    // local wall-clock value, which can disagree with the UTC date string near local midnight
+    // in any timezone ahead of UTC (see the same fix in routes/habits.ts).
+    const rangeStartIso = from.slice(0, 10);
+    const rangeEndIso = to.slice(0, 10);
+    for (const h of habits) {
+      const customDays: number[] | null = h.custom_days ? JSON.parse(h.custom_days) : null;
+      const createdDate = h.created_at.slice(0, 10);
+      for (let d = new Date(`${rangeStartIso}T00:00:00Z`); d.toISOString().slice(0, 10) <= rangeEndIso; d.setUTCDate(d.getUTCDate() + 1)) {
+        const iso = d.toISOString().slice(0, 10);
+        if (iso < createdDate) continue;
+        const due =
+          h.frequency === "custom_days"
+            ? customDays?.includes(d.getUTCDay())
+            : h.frequency === "interval" && h.interval_days
+              ? Math.round((new Date(`${iso}T00:00:00Z`).getTime() - new Date(`${createdDate}T00:00:00Z`).getTime()) / 86400000) % h.interval_days === 0
+              : true; // daily
+        if (!due) continue;
+        habitEvents.push({
+          id: `habit-${h.id}-${iso}`,
+          title: h.title,
+          starts_at: h.deadline_time ? `${iso}T${h.deadline_time}:00` : iso,
+          ends_at: h.deadline_time ? `${iso}T${h.deadline_time}:00` : iso,
+          all_day: !h.deadline_time,
+          habit_id: h.id,
+          color: "#a78bfa",
+          source: "habit",
+        });
+      }
+    }
+  }
+
+  // Goals with a target date get a single pseudo-event on that date.
+  const goalClauses = ["status != 'abandoned'", "target_date IS NOT NULL"];
+  const goalParams: unknown[] = [];
+  if (from) { goalClauses.push("target_date >= ?"); goalParams.push(from); }
+  if (to) { goalClauses.push("target_date <= ?"); goalParams.push(to); }
+  const goals = db.prepare(`SELECT id, title, target_date FROM goals WHERE ${goalClauses.join(" AND ")}`).all(...goalParams) as any[];
+  const goalEvents = goals.map((g) => ({
+    id: `goal-${g.id}`,
+    title: g.title,
+    starts_at: g.target_date,
+    ends_at: g.target_date,
+    all_day: true,
+    goal_id: g.id,
+    color: "#f472b6",
+    source: "goal",
+  }));
+
   res.json([
     ...events.map((e) => ({ ...e, source: "event", color: e.color ?? e.project_color ?? null })),
     ...taskEvents,
+    ...habitEvents,
+    ...goalEvents,
   ]);
 });
 

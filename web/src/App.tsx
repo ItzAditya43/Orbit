@@ -53,6 +53,7 @@ import Review from "./views/Review";
 import Filters from "./views/Filters";
 import Trash from "./views/Trash";
 import Matrix from "./views/Matrix";
+import HabitMatrix from "./views/HabitMatrix";
 import BoardView from "./views/BoardView";
 import ProjectHub from "./views/ProjectHub";
 
@@ -73,6 +74,7 @@ const NAV_GROUPS = [
       { to: "/focus", label: "Focus", icon: TargetIcon },
       { to: "/time", label: "Time", icon: ClockIcon },
       { to: "/matrix", label: "Matrix", icon: GridIcon },
+      { to: "/habit-matrix", label: "Habit Matrix", icon: GridIcon },
       { to: "/goals", label: "Goals", icon: RocketIcon },
       { to: "/habits", label: "Habits", icon: RepeatIcon },
       { to: "/notes", label: "Notes", icon: NoteIcon },
@@ -193,6 +195,7 @@ export default function App() {
           <Route path="/projects/:id" element={<ProjectDetail />} />
           <Route path="/projects/:id/hub" element={<ProjectHub />} />
           <Route path="/matrix" element={<Matrix />} />
+          <Route path="/habit-matrix" element={<HabitMatrix />} />
           <Route path="/boards" element={<BoardView />} />
           <Route path="/boards/:id" element={<BoardView />} />
           <Route path="/focus" element={<Focus />} />

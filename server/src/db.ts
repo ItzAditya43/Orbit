@@ -289,6 +289,10 @@ if (!habitColumnNames.has("target_count")) db.exec("ALTER TABLE habits ADD COLUM
 if (!habitColumnNames.has("unit")) db.exec("ALTER TABLE habits ADD COLUMN unit TEXT"); // e.g. "glasses", "pages"
 if (!habitColumnNames.has("archived")) db.exec("ALTER TABLE habits ADD COLUMN archived INTEGER NOT NULL DEFAULT 0");
 if (!habitColumnNames.has("goal_id")) db.exec("ALTER TABLE habits ADD COLUMN goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL");
+// Frequency now also supports "biweekly" (14-day period target), "custom_days" (specific
+// weekdays, e.g. Mon/Wed/Fri), and "interval" (every N days, e.g. "alternate days" = 2).
+if (!habitColumnNames.has("custom_days")) db.exec("ALTER TABLE habits ADD COLUMN custom_days TEXT"); // JSON array of 0(Sun)-6(Sat)
+if (!habitColumnNames.has("interval_days")) db.exec("ALTER TABLE habits ADD COLUMN interval_days INTEGER");
 
 const habitLogColumns = db.prepare("PRAGMA table_info(habit_logs)").all() as { name: string }[];
 const habitLogColumnNames = new Set(habitLogColumns.map((c) => c.name));

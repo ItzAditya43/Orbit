@@ -224,8 +224,17 @@ export const api = {
   },
   habits: {
     list: () => req<any[]>(`/habits`),
-    create: (body: { title: string; frequency?: string; targetPerPeriod?: number; deadlineTime?: string; targetCount?: number; unit?: string; goalId?: string }) =>
-      req<any>(`/habits`, { method: "POST", body: JSON.stringify(body) }),
+    create: (body: {
+      title: string;
+      frequency?: string;
+      targetPerPeriod?: number;
+      deadlineTime?: string;
+      targetCount?: number;
+      unit?: string;
+      goalId?: string;
+      customDays?: number[];
+      intervalDays?: number;
+    }) => req<any>(`/habits`, { method: "POST", body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) =>
       req<any>(`/habits/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     log: (id: string, amount?: number) => req<any>(`/habits/${id}/log`, { method: "POST", body: JSON.stringify({ amount }) }),
