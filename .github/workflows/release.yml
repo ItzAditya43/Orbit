@@ -35,6 +35,13 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # node-gyp's own Visual Studio auto-detection fails against this runner's VS install
+      # (its version-detection table doesn't recognize it), which better-sqlite3 needs since
+      # it has no prebuild for every Node/arch combination. Setting up the VS dev environment
+      # directly sidesteps node-gyp's detection logic entirely instead of fighting it.
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.platform == 'windows-latest'
+
       - name: Install Linux system dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
