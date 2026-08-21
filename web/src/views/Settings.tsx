@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { api } from "../api";
 import { useToastStore } from "../toastStore";
+import { TimeField } from "../components/TimeField";
 
 function DevicesSection() {
   const qc = useQueryClient();
@@ -120,17 +121,15 @@ export default function Settings() {
         <div className="flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
           <span className="text-sm">Working hours</span>
           <div className="flex items-center gap-2 text-sm">
-            <input
-              type="time"
+            <TimeField
               value={local.workingHoursStart}
-              onChange={(e) => save({ workingHoursStart: e.target.value })}
+              onChange={(v) => save({ workingHoursStart: v })}
               className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1"
             />
             <span className="text-neutral-400">to</span>
-            <input
-              type="time"
+            <TimeField
               value={local.workingHoursEnd}
-              onChange={(e) => save({ workingHoursEnd: e.target.value })}
+              onChange={(v) => save({ workingHoursEnd: v })}
               className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1"
             />
           </div>

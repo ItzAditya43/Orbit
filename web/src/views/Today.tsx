@@ -5,6 +5,7 @@ import { TaskRow } from "../components/TaskRow";
 import { QuickAdd } from "../components/QuickAdd";
 import { EmptyState } from "../components/EmptyState";
 import { BulkActionBar } from "../components/BulkActionBar";
+import { TimeField } from "../components/TimeField";
 import { SunIcon, CircleCheckIcon, TargetIcon, RepeatIcon, ZapIcon } from "../icons";
 import { useQuickAddStore } from "../quickAddStore";
 import { useToastStore } from "../toastStore";
@@ -230,12 +231,11 @@ export default function Today() {
         <div className="flex items-center gap-4 pt-1">
           <label className="flex items-center gap-1.5 text-xs text-neutral-400">
             Slept
-            <input
-              type="time"
-              defaultValue={checkin?.sleep_time ?? ""}
-              onBlur={async (e) => {
-                if (!e.target.value) return;
-                await api.checkins.save(todayStr, { sleepTime: e.target.value });
+            <TimeField
+              value={checkin?.sleep_time ?? ""}
+              onChange={async (v) => {
+                if (!v) return;
+                await api.checkins.save(todayStr, { sleepTime: v });
                 qc.invalidateQueries({ queryKey: ["checkins"] });
               }}
               className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1"
@@ -243,12 +243,11 @@ export default function Today() {
           </label>
           <label className="flex items-center gap-1.5 text-xs text-neutral-400">
             Woke
-            <input
-              type="time"
-              defaultValue={checkin?.wake_time ?? ""}
-              onBlur={async (e) => {
-                if (!e.target.value) return;
-                await api.checkins.save(todayStr, { wakeTime: e.target.value });
+            <TimeField
+              value={checkin?.wake_time ?? ""}
+              onChange={async (v) => {
+                if (!v) return;
+                await api.checkins.save(todayStr, { wakeTime: v });
                 qc.invalidateQueries({ queryKey: ["checkins"] });
               }}
               className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1"

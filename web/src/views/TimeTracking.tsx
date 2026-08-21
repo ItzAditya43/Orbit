@@ -1,22 +1,33 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api";
+import { DateField } from "../components/DateField";
+import { TimeField } from "../components/TimeField";
 
-function toLocalInput(iso: string) {
+function splitLocal(iso: string) {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+}
+function combineLocal(date: string, time: string): Date {
+  const [y, m, d] = date.split("-").map(Number);
+  const [hh, mm] = (time || "00:00").split(":").map(Number);
+  return new Date(y, m - 1, d, hh, mm);
 }
 
 function EntryRow({ entry, invalidate }: { entry: any; invalidate: () => void }) {
   const [editing, setEditing] = useState(false);
-  const [start, setStart] = useState(toLocalInput(entry.started_at));
-  const [end, setEnd] = useState(entry.ended_at ? toLocalInput(entry.ended_at) : "");
+  const startSplit = splitLocal(entry.started_at);
+  const endSplit = entry.ended_at ? splitLocal(entry.ended_at) : null;
+  const [startDate, setStartDate] = useState(startSplit.date);
+  const [startTime, setStartTime] = useState(startSplit.time);
+  const [endDate, setEndDate] = useState(endSplit?.date ?? startSplit.date);
+  const [endTime, setEndTime] = useState(endSplit?.time ?? "");
 
   const save = async () => {
     await api.timeEntries.update(entry.id, {
-      startedAt: new Date(start).toISOString(),
-      endedAt: end ? new Date(end).toISOString() : undefined,
+      startedAt: combineLocal(startDate, startTime).toISOString(),
+      endedAt: endTime ? combineLocal(endDate, endTime).toISOString() : undefined,
     });
     setEditing(false);
     invalidate();
@@ -30,9 +41,11 @@ function EntryRow({ entry, invalidate }: { entry: any; invalidate: () => void })
   if (editing) {
     return (
       <div className="flex flex-wrap items-center gap-2 text-sm px-3 py-2 rounded-lg border border-neutral-900 dark:border-white">
-        <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1 text-xs" />
+        <DateField value={startDate} onChange={(v) => setStartDate(v ?? startDate)} className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1 text-xs" />
+        <TimeField value={startTime} onChange={setStartTime} className="w-14 rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1 text-xs" />
         <span className="text-neutral-400">to</span>
-        <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1 text-xs" />
+        <DateField value={endDate} onChange={(v) => setEndDate(v ?? endDate)} className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1 text-xs" />
+        <TimeField value={endTime} onChange={setEndTime} className="w-14 rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-1 text-xs" />
         <button onClick={save} className="ml-auto text-xs px-2 py-1 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900">
           Save
         </button>

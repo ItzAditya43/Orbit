@@ -6,6 +6,7 @@ import { PriorityPicker } from "./PriorityPicker";
 import { useToastStore } from "../toastStore";
 import { CheckIcon, XIcon } from "../icons";
 import { AttachmentsPanel } from "./AttachmentsPanel";
+import { DateField } from "./DateField";
 
 const COLORS = ["", "#f87171", "#fb923c", "#fbbf24", "#4ade80", "#22d3ee", "#818cf8", "#c084fc"];
 
@@ -112,10 +113,9 @@ export function TaskDetailDrawer() {
               </label>
               <label className="flex items-center gap-1.5 text-neutral-500">
                 Due
-                <input
-                  type="date"
-                  value={task.due_date ?? ""}
-                  onChange={(e) => patch({ dueDate: e.target.value || null })}
+                <DateField
+                  value={task.due_date}
+                  onChange={(v) => patch({ dueDate: v })}
                   className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-0.5"
                 />
               </label>

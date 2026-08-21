@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api";
+import { TimeField } from "../components/TimeField";
 
 export default function Habits() {
   const qc = useQueryClient();
@@ -110,11 +111,10 @@ export default function Habits() {
             {frequency === "daily" && (
               <div className="flex gap-2">
                 <label className="flex-1 flex flex-col gap-1">
-                  <span className="text-neutral-400">Deadline (optional) — e.g. finish by 11:59 PM</span>
-                  <input
-                    type="time"
+                  <span className="text-neutral-400">Deadline (optional) — e.g. finish by 23:59</span>
+                  <TimeField
                     value={deadlineTime}
-                    onChange={(e) => setDeadlineTime(e.target.value)}
+                    onChange={setDeadlineTime}
                     className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-2 py-1.5"
                   />
                 </label>
