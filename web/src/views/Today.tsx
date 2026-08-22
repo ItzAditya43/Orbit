@@ -184,7 +184,7 @@ export default function Today() {
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-4 pt-1">
+        <div className="flex flex-col gap-2 pt-1">
           <label className="flex items-center gap-1.5 text-xs text-neutral-400">
             Slept
             <TimeField
