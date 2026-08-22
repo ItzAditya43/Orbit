@@ -69,7 +69,7 @@ function daysBetween(a: string, b: string): number {
 habitsRouter.get("/", (req, res) => {
   const includeArchived = req.query.includeArchived === "true";
   const habits = db
-    .prepare(`SELECT * FROM habits ${includeArchived ? "" : "WHERE archived = 0"} ORDER BY created_at ASC`)
+    .prepare(`SELECT * FROM habits ${includeArchived ? "" : "WHERE archived = 0"} ORDER BY order_index ASC, created_at ASC`)
     .all() as any[];
   const today = new Date().toISOString().slice(0, 10);
   const weekStart = currentWeekStart();
@@ -153,6 +153,18 @@ habitsRouter.post("/", (req, res) => {
     new Date().toISOString()
   );
   res.status(201).json(db.prepare("SELECT * FROM habits WHERE id = ?").get(id));
+});
+
+// Body: { ids: string[] } — the full list of habit ids in their new display order.
+habitsRouter.post("/reorder", (req, res) => {
+  const { ids } = req.body ?? {};
+  if (!Array.isArray(ids)) return res.status(400).json({ error: "ids array required" });
+  const update = db.prepare("UPDATE habits SET order_index = ? WHERE id = ?");
+  const tx = db.transaction((list: string[]) => {
+    list.forEach((id, i) => update.run(i, id));
+  });
+  tx(ids);
+  res.json({ ok: true });
 });
 
 habitsRouter.patch("/:id", (req, res) => {

@@ -293,6 +293,15 @@ if (!habitColumnNames.has("goal_id")) db.exec("ALTER TABLE habits ADD COLUMN goa
 // weekdays, e.g. Mon/Wed/Fri), and "interval" (every N days, e.g. "alternate days" = 2).
 if (!habitColumnNames.has("custom_days")) db.exec("ALTER TABLE habits ADD COLUMN custom_days TEXT"); // JSON array of 0(Sun)-6(Sat)
 if (!habitColumnNames.has("interval_days")) db.exec("ALTER TABLE habits ADD COLUMN interval_days INTEGER");
+if (!habitColumnNames.has("order_index")) {
+  db.exec("ALTER TABLE habits ADD COLUMN order_index INTEGER NOT NULL DEFAULT 0");
+  db.exec(`
+    UPDATE habits SET order_index = (
+      SELECT COUNT(*) FROM habits h2 WHERE h2.created_at < habits.created_at
+         OR (h2.created_at = habits.created_at AND h2.id < habits.id)
+    )
+  `);
+}
 
 const habitLogColumns = db.prepare("PRAGMA table_info(habit_logs)").all() as { name: string }[];
 const habitLogColumnNames = new Set(habitLogColumns.map((c) => c.name));

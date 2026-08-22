@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api";
 import { TimeField } from "../components/TimeField";
 import { Heatmap } from "../components/Heatmap";
@@ -184,7 +184,23 @@ function scheduleLabel(h: any): string | null {
   return null;
 }
 
-function HabitCard({ habit: h, goals, invalidate }: { habit: any; goals: any[]; invalidate: () => void }) {
+function HabitCard({
+  habit: h,
+  goals,
+  invalidate,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  dragging,
+}: {
+  habit: any;
+  goals: any[];
+  invalidate: () => void;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  dragging?: boolean;
+}) {
   const [editing, setEditing] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [form, setForm] = useState<HabitFormState>(() => formStateFromHabit(h));
@@ -218,13 +234,17 @@ function HabitCard({ habit: h, goals, invalidate }: { habit: any; goals: any[]; 
 
   return (
     <div
-      className={`rounded-lg border p-3 space-y-2 ${
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      className={`rounded-lg border p-3 space-y-2 cursor-grab active:cursor-grabbing ${
         h.deadlineStatus === "missed"
           ? "border-red-300 dark:border-red-900"
           : h.deadlineStatus === "due-soon"
             ? "border-amber-300 dark:border-amber-900"
             : "border-neutral-200 dark:border-neutral-800"
-      } ${!h.dueToday ? "opacity-60" : ""}`}
+      } ${!h.dueToday ? "opacity-60" : ""} ${dragging ? "opacity-40" : ""}`}
     >
     <div className="flex items-center justify-between">
       <div>
@@ -329,7 +349,29 @@ export default function Habits() {
   const [title, setTitle] = useState("");
   const [form, setForm] = useState<HabitFormState>(emptyFormState());
   const [showOptions, setShowOptions] = useState(false);
+  const [order, setOrder] = useState<any[] | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const invalidate = () => qc.invalidateQueries({ queryKey: ["habits"] });
+  const displayHabits = order ?? habits;
+
+  // Once the server confirms the new order (habits refetches in that order), drop the local
+  // override so this stays in sync with the source of truth instead of drifting from it.
+  useEffect(() => {
+    setOrder(null);
+  }, [habits]);
+
+  const reorder = async (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    const list = [...displayHabits];
+    const fromIdx = list.findIndex((h) => h.id === fromId);
+    const toIdx = list.findIndex((h) => h.id === toId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const [moved] = list.splice(fromIdx, 1);
+    list.splice(toIdx, 0, moved);
+    setOrder(list);
+    await api.habits.reorder(list.map((h) => h.id));
+    invalidate();
+  };
 
   const create = async () => {
     if (!title.trim()) return;
@@ -370,8 +412,21 @@ export default function Habits() {
       </form>
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
       <div className="space-y-2">
-        {habits.map((h: any) => (
-          <HabitCard key={h.id} habit={h} goals={goals} invalidate={invalidate} />
+        {displayHabits.map((h: any) => (
+          <HabitCard
+            key={h.id}
+            habit={h}
+            goals={goals}
+            invalidate={invalidate}
+            dragging={draggingId === h.id}
+            onDragStart={() => setDraggingId(h.id)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (draggingId) reorder(draggingId, h.id);
+              setDraggingId(null);
+            }}
+          />
         ))}
         {habits.length === 0 && !isLoading && <p className="text-sm text-neutral-400">No habits yet.</p>}
       </div>

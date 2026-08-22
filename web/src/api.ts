@@ -240,6 +240,7 @@ export const api = {
     log: (id: string, amount?: number) => req<any>(`/habits/${id}/log`, { method: "POST", body: JSON.stringify({ amount }) }),
     unlog: (id: string) => req<void>(`/habits/${id}/log`, { method: "DELETE", body: JSON.stringify({}) }),
     remove: (id: string) => req<void>(`/habits/${id}`, { method: "DELETE" }),
+    reorder: (ids: string[]) => req<{ ok: boolean }>(`/habits/reorder`, { method: "POST", body: JSON.stringify({ ids }) }),
   },
   checkins: {
     today: () => req<any>(`/checkins/today`),

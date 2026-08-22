@@ -38,7 +38,10 @@ export default function ProjectDetail() {
   };
 
   const onAdd = async (title: string) => {
-    await api.tasks.create({ title, projectId: id });
+    // isInbox: true — otherwise a dateless project task has no due date, no scheduled
+    // time, and isn't in the inbox either, so it never appears on the Calendar or its
+    // Unscheduled panel and is effectively unreachable from there.
+    await api.tasks.create({ title, projectId: id, isInbox: true });
     invalidate();
   };
   const onToggle = async (task: Task) => {
