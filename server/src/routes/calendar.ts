@@ -32,7 +32,7 @@ calendarRouter.get("/", (req, res) => {
     .prepare(
       `SELECT t.id, t.title, t.scheduled_at, t.due_date, t.priority, t.project_id, p.color AS project_color
        FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
-       WHERE ${taskClauses.join(" AND ")} AND (t.recurrence IS NULL OR t.recurrence NOT IN ('daily','interval','custom_days'))`
+       WHERE ${taskClauses.join(" AND ")} AND (t.recurrence IS NULL OR t.recurrence NOT IN ('daily','weekly','interval','custom_days'))`
     )
     .all(...taskParams) as any[];
 
@@ -53,9 +53,9 @@ calendarRouter.get("/", (req, res) => {
   if (from && to) {
     const recurringTasks = db
       .prepare(
-        `SELECT t.id, t.title, t.due_date, t.priority, t.project_id, t.recurrence, t.recurrence_interval_days, t.recurrence_days, p.color AS project_color
+        `SELECT t.id, t.title, t.due_date, t.priority, t.project_id, t.recurrence, t.recurrence_interval_days, t.recurrence_days, t.recurrence_end_date, p.color AS project_color
          FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
-         WHERE t.status != 'done' AND t.due_date IS NOT NULL AND t.recurrence IN ('daily','interval','custom_days')`
+         WHERE t.status != 'done' AND t.due_date IS NOT NULL AND t.recurrence IN ('daily','weekly','interval','custom_days')`
       )
       .all() as any[];
     const rangeStartIso = from.slice(0, 10);
@@ -66,12 +66,15 @@ calendarRouter.get("/", (req, res) => {
       for (let d = new Date(`${rangeStartIso}T00:00:00Z`); d.toISOString().slice(0, 10) <= rangeEndIso; d.setUTCDate(d.getUTCDate() + 1)) {
         const iso = d.toISOString().slice(0, 10);
         if (iso < anchorIso) continue;
+        if (t.recurrence_end_date && iso > t.recurrence_end_date) continue;
         const due =
           t.recurrence === "custom_days"
             ? customDays?.includes(d.getUTCDay())
             : t.recurrence === "interval" && t.recurrence_interval_days
               ? Math.round((new Date(`${iso}T00:00:00Z`).getTime() - new Date(`${anchorIso}T00:00:00Z`).getTime()) / 86400000) % t.recurrence_interval_days === 0
-              : true; // daily
+              : t.recurrence === "weekly"
+                ? Math.round((new Date(`${iso}T00:00:00Z`).getTime() - new Date(`${anchorIso}T00:00:00Z`).getTime()) / 86400000) % 7 === 0
+                : true; // daily
         if (!due) continue;
         recurringTaskEvents.push({
           id: `task-${t.id}-${iso}`,

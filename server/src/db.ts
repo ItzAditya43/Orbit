@@ -277,6 +277,7 @@ if (!taskColumnNames.has("energy")) db.exec("ALTER TABLE tasks ADD COLUMN energy
 // matching habits — plain daily/weekly/monthly wasn't enough for "every other day" or "Mon/Wed/Fri".
 if (!taskColumnNames.has("recurrence_interval_days")) db.exec("ALTER TABLE tasks ADD COLUMN recurrence_interval_days INTEGER");
 if (!taskColumnNames.has("recurrence_days")) db.exec("ALTER TABLE tasks ADD COLUMN recurrence_days TEXT"); // JSON array of 0(Sun)-6(Sat)
+if (!taskColumnNames.has("recurrence_end_date")) db.exec("ALTER TABLE tasks ADD COLUMN recurrence_end_date TEXT"); // last day (inclusive) to generate occurrences for; NULL = no end
 
 if (!notesColumnNames.has("deleted_at")) db.exec("ALTER TABLE notes ADD COLUMN deleted_at TEXT");
 
@@ -306,6 +307,13 @@ if (!habitColumnNames.has("order_index")) {
     )
   `);
 }
+
+// Manual quadrant overrides for the Habit Matrix — urgent/important are normally derived
+// (deadline status, period progress, goal link), but there's no single real field to drag-write
+// the way the task matrix writes priority/due-date, so dragging a habit between quadrants sets
+// these instead. NULL = fall back to the computed value.
+if (!habitColumnNames.has("urgent_override")) db.exec("ALTER TABLE habits ADD COLUMN urgent_override INTEGER");
+if (!habitColumnNames.has("important_override")) db.exec("ALTER TABLE habits ADD COLUMN important_override INTEGER");
 
 const habitLogColumns = db.prepare("PRAGMA table_info(habit_logs)").all() as { name: string }[];
 const habitLogColumnNames = new Set(habitLogColumns.map((c) => c.name));

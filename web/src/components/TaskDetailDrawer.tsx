@@ -191,6 +191,16 @@ export function TaskDetailDrawer() {
                   })}
                 </div>
               )}
+              {task.recurrence && task.recurrence !== "none" && (
+                <label className="flex items-center gap-1.5 text-neutral-500">
+                  Ends
+                  <DateField
+                    value={task.recurrence_end_date ?? null}
+                    onChange={(v) => patch({ recurrenceEndDate: v })}
+                    className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-0.5"
+                  />
+                </label>
+              )}
               <label className="flex items-center gap-1.5 text-neutral-500">
                 Energy
                 <select

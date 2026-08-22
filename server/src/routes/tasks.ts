@@ -177,14 +177,15 @@ tasksRouter.post("/", (req, res) => {
     recurrence,
     recurrenceIntervalDays,
     recurrenceDays,
+    recurrenceEndDate,
   } = req.body ?? {};
   if (!title || typeof title !== "string") return res.status(400).json({ error: "title is required" });
 
   const id = randomUUID();
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO tasks (id, title, notes, project_id, parent_id, priority, due_date, start_date, scheduled_at, estimate_minutes, is_inbox, color, energy, recurrence, recurrence_interval_days, recurrence_days, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO tasks (id, title, notes, project_id, parent_id, priority, due_date, start_date, scheduled_at, estimate_minutes, is_inbox, color, energy, recurrence, recurrence_interval_days, recurrence_days, recurrence_end_date, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     id,
     title,
@@ -202,6 +203,7 @@ tasksRouter.post("/", (req, res) => {
     recurrence ?? null,
     recurrenceIntervalDays ?? null,
     Array.isArray(recurrenceDays) ? JSON.stringify(recurrenceDays) : null,
+    recurrenceEndDate ?? null,
     now,
     now
   );
@@ -229,6 +231,7 @@ const PATCHABLE_FIELDS: Record<string, string> = {
   recurrence: "recurrence",
   recurrenceIntervalDays: "recurrence_interval_days",
   recurrenceDays: "recurrence_days",
+  recurrenceEndDate: "recurrence_end_date",
   color: "color",
   energy: "energy",
 };
@@ -295,14 +298,17 @@ tasksRouter.post("/:id/complete", (req, res) => {
         next.setDate(next.getDate() + 1);
       }
     }
-    const newId = randomUUID();
-    db.prepare(
-      `INSERT INTO tasks (id, title, notes, project_id, priority, due_date, recurrence, recurrence_interval_days, recurrence_days, estimate_minutes, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      newId, task.title, task.notes, task.project_id, task.priority, next.toISOString().slice(0, 10),
-      task.recurrence, task.recurrence_interval_days, task.recurrence_days, task.estimate_minutes, now, now
-    );
+    const nextDue = next.toISOString().slice(0, 10);
+    if (!task.recurrence_end_date || nextDue <= task.recurrence_end_date) {
+      const newId = randomUUID();
+      db.prepare(
+        `INSERT INTO tasks (id, title, notes, project_id, priority, due_date, recurrence, recurrence_interval_days, recurrence_days, recurrence_end_date, estimate_minutes, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        newId, task.title, task.notes, task.project_id, task.priority, nextDue,
+        task.recurrence, task.recurrence_interval_days, task.recurrence_days, task.recurrence_end_date, task.estimate_minutes, now, now
+      );
+    }
   }
   fireTrigger("task_completed", { taskId: task.id, taskTitle: task.title, projectId: task.project_id });
   res.json(hydrate(task));

@@ -170,7 +170,8 @@ habitsRouter.post("/reorder", (req, res) => {
 habitsRouter.patch("/:id", (req, res) => {
   const existing = db.prepare("SELECT * FROM habits WHERE id = ?").get(req.params.id) as any;
   if (!existing) return res.status(404).json({ error: "not found" });
-  const { title, frequency, targetPerPeriod, deadlineTime, targetCount, unit, archived, goalId, customDays, intervalDays } = req.body ?? {};
+  const { title, frequency, targetPerPeriod, deadlineTime, targetCount, unit, archived, goalId, customDays, intervalDays, urgentOverride, importantOverride } =
+    req.body ?? {};
   db.prepare(
     `UPDATE habits SET
       title = COALESCE(?, title),
@@ -182,7 +183,9 @@ habitsRouter.patch("/:id", (req, res) => {
       archived = COALESCE(?, archived),
       goal_id = ?,
       custom_days = ?,
-      interval_days = ?
+      interval_days = ?,
+      urgent_override = ?,
+      important_override = ?
      WHERE id = ?`
   ).run(
     title ?? null,
@@ -195,6 +198,8 @@ habitsRouter.patch("/:id", (req, res) => {
     goalId !== undefined ? goalId : existing.goal_id,
     customDays !== undefined ? (Array.isArray(customDays) ? JSON.stringify(customDays) : null) : existing.custom_days,
     intervalDays !== undefined ? intervalDays : existing.interval_days,
+    urgentOverride !== undefined ? (urgentOverride === null ? null : urgentOverride ? 1 : 0) : existing.urgent_override,
+    importantOverride !== undefined ? (importantOverride === null ? null : importantOverride ? 1 : 0) : existing.important_override,
     req.params.id
   );
   res.json(db.prepare("SELECT * FROM habits WHERE id = ?").get(req.params.id));
