@@ -57,10 +57,19 @@ jobs:
 
       - name: Install server dependencies
         working-directory: server
+        # GYP_MSVS_VERSION forces node-gyp to trust a known toolset label instead of trying to
+        # identify the runner's actual VS release itself — its bundled version table doesn't
+        # recognize it (logged as "unknown version 'undefined'") and refuses to proceed even
+        # though the VS dev environment (via msvc-dev-cmd above) is already active and correct.
+        # The actual compiler invocation just uses cl.exe from PATH, so the label only needs to
+        # be one node-gyp accepts, not one that literally matches what's installed.
+        env:
+          GYP_MSVS_VERSION: "2022"
         run: npm install
 
       - uses: tauri-apps/tauri-action@v0
         env:
+          GYP_MSVS_VERSION: "2022"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
