@@ -18,7 +18,12 @@ const projectColorStmt = db.prepare("SELECT color FROM projects WHERE id = ?");
 function hydrate(task: any) {
   if (!task) return task;
   const projectColor = task.project_id ? (projectColorStmt.get(task.project_id) as any)?.color ?? null : null;
-  return { ...task, tags: tagsForTask(task.id), project_color: projectColor };
+  return {
+    ...task,
+    tags: tagsForTask(task.id),
+    project_color: projectColor,
+    recurrence_days: task.recurrence_days ? JSON.parse(task.recurrence_days) : null,
+  };
 }
 
 function getSetting(key: string, fallback: unknown) {
@@ -169,14 +174,17 @@ tasksRouter.post("/", (req, res) => {
     tagIds,
     color,
     energy,
+    recurrence,
+    recurrenceIntervalDays,
+    recurrenceDays,
   } = req.body ?? {};
   if (!title || typeof title !== "string") return res.status(400).json({ error: "title is required" });
 
   const id = randomUUID();
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO tasks (id, title, notes, project_id, parent_id, priority, due_date, start_date, scheduled_at, estimate_minutes, is_inbox, color, energy, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO tasks (id, title, notes, project_id, parent_id, priority, due_date, start_date, scheduled_at, estimate_minutes, is_inbox, color, energy, recurrence, recurrence_interval_days, recurrence_days, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     id,
     title,
@@ -191,6 +199,9 @@ tasksRouter.post("/", (req, res) => {
     isInbox ? 1 : 0,
     color ?? null,
     energy ?? null,
+    recurrence ?? null,
+    recurrenceIntervalDays ?? null,
+    Array.isArray(recurrenceDays) ? JSON.stringify(recurrenceDays) : null,
     now,
     now
   );
@@ -216,6 +227,8 @@ const PATCHABLE_FIELDS: Record<string, string> = {
   scheduledAt: "scheduled_at",
   orderIndex: "order_index",
   recurrence: "recurrence",
+  recurrenceIntervalDays: "recurrence_interval_days",
+  recurrenceDays: "recurrence_days",
   color: "color",
   energy: "energy",
 };
@@ -230,6 +243,7 @@ tasksRouter.patch("/:id", (req, res) => {
     if (key in req.body) {
       let value = req.body[key];
       if (key === "isInbox") value = value ? 1 : 0;
+      if (key === "recurrenceDays") value = Array.isArray(value) ? JSON.stringify(value) : null;
       updates.push(`${col} = ?`);
       values.push(value);
     }
@@ -272,11 +286,23 @@ tasksRouter.post("/:id/complete", (req, res) => {
     if (task.recurrence === "daily") next.setDate(next.getDate() + 1);
     else if (task.recurrence === "weekly") next.setDate(next.getDate() + 7);
     else if (task.recurrence === "monthly") next.setMonth(next.getMonth() + 1);
+    else if (task.recurrence === "interval") next.setDate(next.getDate() + (task.recurrence_interval_days || 1));
+    else if (task.recurrence === "custom_days") {
+      const days: number[] = task.recurrence_days ? JSON.parse(task.recurrence_days) : [];
+      if (days.length) {
+        do { next.setDate(next.getDate() + 1); } while (!days.includes(next.getUTCDay()));
+      } else {
+        next.setDate(next.getDate() + 1);
+      }
+    }
     const newId = randomUUID();
     db.prepare(
-      `INSERT INTO tasks (id, title, notes, project_id, priority, due_date, recurrence, estimate_minutes, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`
-    ).run(newId, task.title, task.notes, task.project_id, task.priority, next.toISOString().slice(0, 10), task.recurrence, task.estimate_minutes, now, now);
+      `INSERT INTO tasks (id, title, notes, project_id, priority, due_date, recurrence, recurrence_interval_days, recurrence_days, estimate_minutes, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      newId, task.title, task.notes, task.project_id, task.priority, next.toISOString().slice(0, 10),
+      task.recurrence, task.recurrence_interval_days, task.recurrence_days, task.estimate_minutes, now, now
+    );
   }
   fireTrigger("task_completed", { taskId: task.id, taskTitle: task.title, projectId: task.project_id });
   res.json(hydrate(task));

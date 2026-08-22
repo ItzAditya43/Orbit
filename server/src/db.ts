@@ -273,6 +273,10 @@ const taskColumnNames = new Set(taskColumns.map((c) => c.name));
 if (!taskColumnNames.has("deleted_at")) db.exec("ALTER TABLE tasks ADD COLUMN deleted_at TEXT");
 if (!taskColumnNames.has("color")) db.exec("ALTER TABLE tasks ADD COLUMN color TEXT");
 if (!taskColumnNames.has("energy")) db.exec("ALTER TABLE tasks ADD COLUMN energy TEXT");
+// recurrence gained "interval" (every N days) and "custom_days" (specific weekdays) modes,
+// matching habits — plain daily/weekly/monthly wasn't enough for "every other day" or "Mon/Wed/Fri".
+if (!taskColumnNames.has("recurrence_interval_days")) db.exec("ALTER TABLE tasks ADD COLUMN recurrence_interval_days INTEGER");
+if (!taskColumnNames.has("recurrence_days")) db.exec("ALTER TABLE tasks ADD COLUMN recurrence_days TEXT"); // JSON array of 0(Sun)-6(Sat)
 
 if (!notesColumnNames.has("deleted_at")) db.exec("ALTER TABLE notes ADD COLUMN deleted_at TEXT");
 

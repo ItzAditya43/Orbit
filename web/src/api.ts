@@ -51,6 +51,8 @@ export interface Task {
   order_index: number;
   completed_at: string | null;
   recurrence?: string | null;
+  recurrence_interval_days?: number | null;
+  recurrence_days?: number[] | null;
   deleted_at?: string | null;
   color?: string | null;
   energy?: "low" | "medium" | "high" | null;

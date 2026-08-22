@@ -21,6 +21,9 @@ calendarRouter.get("/", (req, res) => {
     .all(...params) as any[];
 
   // Overlay scheduled/due tasks as pseudo-events so the calendar reflects the task list too.
+  // Tasks with a per-day recurrence (daily/interval/custom_days) are expanded separately below
+  // onto every day they're due, not just their single stored due_date — otherwise "Repeats"
+  // was pure metadata that never showed up anywhere until you completed the task.
   const taskClauses = ["status != 'done'", "(scheduled_at IS NOT NULL OR due_date IS NOT NULL)"];
   const taskParams: unknown[] = [];
   if (from) { taskClauses.push("(scheduled_at >= ? OR due_date >= ?)"); taskParams.push(from, from); }
@@ -29,7 +32,7 @@ calendarRouter.get("/", (req, res) => {
     .prepare(
       `SELECT t.id, t.title, t.scheduled_at, t.due_date, t.priority, t.project_id, p.color AS project_color
        FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
-       WHERE ${taskClauses.join(" AND ")}`
+       WHERE ${taskClauses.join(" AND ")} AND (t.recurrence IS NULL OR t.recurrence NOT IN ('daily','interval','custom_days'))`
     )
     .all(...taskParams) as any[];
 
@@ -45,6 +48,46 @@ calendarRouter.get("/", (req, res) => {
     priority: t.priority,
     source: "task",
   }));
+
+  const recurringTaskEvents: any[] = [];
+  if (from && to) {
+    const recurringTasks = db
+      .prepare(
+        `SELECT t.id, t.title, t.due_date, t.priority, t.project_id, t.recurrence, t.recurrence_interval_days, t.recurrence_days, p.color AS project_color
+         FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
+         WHERE t.status != 'done' AND t.due_date IS NOT NULL AND t.recurrence IN ('daily','interval','custom_days')`
+      )
+      .all() as any[];
+    const rangeStartIso = from.slice(0, 10);
+    const rangeEndIso = to.slice(0, 10);
+    for (const t of recurringTasks) {
+      const anchorIso = t.due_date.slice(0, 10);
+      const customDays: number[] | null = t.recurrence_days ? JSON.parse(t.recurrence_days) : null;
+      for (let d = new Date(`${rangeStartIso}T00:00:00Z`); d.toISOString().slice(0, 10) <= rangeEndIso; d.setUTCDate(d.getUTCDate() + 1)) {
+        const iso = d.toISOString().slice(0, 10);
+        if (iso < anchorIso) continue;
+        const due =
+          t.recurrence === "custom_days"
+            ? customDays?.includes(d.getUTCDay())
+            : t.recurrence === "interval" && t.recurrence_interval_days
+              ? Math.round((new Date(`${iso}T00:00:00Z`).getTime() - new Date(`${anchorIso}T00:00:00Z`).getTime()) / 86400000) % t.recurrence_interval_days === 0
+              : true; // daily
+        if (!due) continue;
+        recurringTaskEvents.push({
+          id: `task-${t.id}-${iso}`,
+          title: t.title,
+          starts_at: iso,
+          ends_at: iso,
+          all_day: true,
+          task_id: t.id,
+          project_id: t.project_id,
+          color: t.project_color,
+          priority: t.priority,
+          source: "task",
+        });
+      }
+    }
+  }
 
   // Habits with a clear per-day due-ness (daily / custom weekdays / every-N-days) get overlaid
   // on the days they're actually due. Period-based habits (weekly/biweekly/monthly, tracked as
@@ -105,6 +148,7 @@ calendarRouter.get("/", (req, res) => {
   res.json([
     ...events.map((e) => ({ ...e, source: "event", color: e.color ?? e.project_color ?? null })),
     ...taskEvents,
+    ...recurringTaskEvents,
     ...habitEvents,
     ...goalEvents,
   ]);

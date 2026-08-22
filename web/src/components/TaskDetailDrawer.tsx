@@ -138,15 +138,59 @@ export function TaskDetailDrawer() {
                 Repeats
                 <select
                   value={task.recurrence ?? "none"}
-                  onChange={(e) => patch({ recurrence: e.target.value === "none" ? null : e.target.value })}
+                  onChange={(e) => {
+                    const recurrence = e.target.value === "none" ? null : e.target.value;
+                    patch(
+                      recurrence === "interval"
+                        ? { recurrence, recurrenceIntervalDays: task.recurrence_interval_days ?? 2 }
+                        : recurrence === "custom_days"
+                          ? { recurrence, recurrenceDays: task.recurrence_days ?? [] }
+                          : { recurrence }
+                    );
+                  }}
                   className="rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-0.5"
                 >
                   <option value="none">Never</option>
                   <option value="daily">Daily</option>
+                  <option value="interval">Every N days</option>
+                  <option value="custom_days">Custom days</option>
                   <option value="weekly">Weekly</option>
                   <option value="monthly">Monthly</option>
                 </select>
               </label>
+              {task.recurrence === "interval" && (
+                <label className="flex items-center gap-1.5 text-neutral-500">
+                  Every
+                  <input
+                    type="number"
+                    min={2}
+                    value={task.recurrence_interval_days ?? 2}
+                    onChange={(e) => patch({ recurrenceIntervalDays: Math.max(2, Number(e.target.value) || 2) })}
+                    className="w-12 rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-1.5 py-0.5"
+                  />
+                  days
+                </label>
+              )}
+              {task.recurrence === "custom_days" && (
+                <div className="flex items-center gap-1">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, i) => {
+                    const days: number[] = task.recurrence_days ?? [];
+                    const active = days.includes(i);
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => patch({ recurrenceDays: active ? days.filter((d) => d !== i) : [...days, i].sort() })}
+                        className={`h-6 w-6 rounded-full text-[10px] ${
+                          active ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900" : "border border-neutral-200 dark:border-neutral-800"
+                        }`}
+                      >
+                        {label[0]}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <label className="flex items-center gap-1.5 text-neutral-500">
                 Energy
                 <select
