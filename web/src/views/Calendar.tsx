@@ -90,7 +90,10 @@ export default function Calendar() {
   const rescheduleTo = async (e: any, newDay: string, duplicate = false) => {
     if (e.source === "task") {
       if (duplicate) await api.tasks.create({ title: e.title, dueDate: newDay, priority: e.priority ?? undefined, projectId: e.project_id ?? undefined });
-      else await api.tasks.update(e.task_id, { dueDate: newDay });
+      // isInbox: false too — otherwise a task scheduled from the Unscheduled panel keeps
+      // matching the inbox filter (due date and inbox status are independent flags) and just
+      // sits there showing as still-unscheduled even though it now has a real due date.
+      else await api.tasks.update(e.task_id, { dueDate: newDay, isInbox: false });
     } else if (e.source === "goal") {
       await api.goals.update(e.goal_id, { targetDate: newDay });
     } else if (e.source === "event") {
@@ -120,7 +123,7 @@ export default function Calendar() {
     const newStart = `${pad(hour)}:${pad(minute)}`;
     if (e.source === "task") {
       const scheduledAt = new Date(`${newDay}T${newStart}:00`).toISOString();
-      await api.tasks.update(e.task_id, { scheduledAt });
+      await api.tasks.update(e.task_id, { scheduledAt, isInbox: false });
     } else if (e.source === "event") {
       const oldStart = new Date(e.starts_at);
       const oldEnd = new Date(e.ends_at ?? e.starts_at);
