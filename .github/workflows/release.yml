@@ -23,7 +23,7 @@ jobs:
         include:
           - platform: ubuntu-22.04
             args: "--bundles appimage,deb,rpm"
-          - platform: windows-latest
+          - platform: windows-2022
             args: "--bundles msi,nsis"
     runs-on: ${{ matrix.platform }}
     steps:
@@ -40,7 +40,7 @@ jobs:
       # it has no prebuild for every Node/arch combination. Setting up the VS dev environment
       # directly sidesteps node-gyp's detection logic entirely instead of fighting it.
       - uses: ilammy/msvc-dev-cmd@v1
-        if: matrix.platform == 'windows-latest'
+        if: matrix.platform == 'windows-2022'
 
       - name: Install Linux system dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -57,13 +57,10 @@ jobs:
 
       - name: Install server dependencies
         working-directory: server
-        # npm_config_msvs_version (-> node-gyp's --msvs_version) forces node-gyp to trust a
-        # known toolset label instead of trying to identify the runner's actual VS release
-        # itself — its bundled version table doesn't recognize it (logged as "unknown version
-        # 'undefined'") and refuses to proceed even though the VS dev environment (via
-        # msvc-dev-cmd above) is already active and correct. GYP_MSVS_VERSION, tried first,
-        # turned out to be the wrong variable — node-gyp's own error explicitly named
-        # "command line or npm config" as what it checks, not that env var.
+        # windows-latest's VS install is newer than this node-gyp release recognizes at all
+        # (fails outright, even unforced) — pinned windows-2022 for a VS version node-gyp
+        # actually knows about, and npm_config_msvs_version tells it which one to trust
+        # instead of running its own (here, broken) auto-detection.
         env:
           npm_config_msvs_version: "2022"
         run: npm install
