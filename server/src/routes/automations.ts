@@ -63,7 +63,7 @@ notificationsRouter.post("/read-all", (_req, res) => {
 notificationsRouter.post("/check-due", (_req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const dueTasks = db
-    .prepare("SELECT id, title, due_date FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date <= ?")
+    .prepare("SELECT id, title, due_date FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date <= ?")
     .all(today) as { id: string; title: string; due_date: string }[];
 
   const created: any[] = [];

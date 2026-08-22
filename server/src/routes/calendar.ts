@@ -24,7 +24,7 @@ calendarRouter.get("/", (req, res) => {
   // Tasks with a per-day recurrence (daily/interval/custom_days) are expanded separately below
   // onto every day they're due, not just their single stored due_date — otherwise "Repeats"
   // was pure metadata that never showed up anywhere until you completed the task.
-  const taskClauses = ["status != 'done'", "(scheduled_at IS NOT NULL OR due_date IS NOT NULL)"];
+  const taskClauses = ["t.status != 'done'", "t.deleted_at IS NULL", "(t.scheduled_at IS NOT NULL OR t.due_date IS NOT NULL)"];
   const taskParams: unknown[] = [];
   if (from) { taskClauses.push("(scheduled_at >= ? OR due_date >= ?)"); taskParams.push(from, from); }
   if (to) { taskClauses.push("(scheduled_at <= ? OR due_date <= ?)"); taskParams.push(to, to); }
@@ -53,15 +53,17 @@ calendarRouter.get("/", (req, res) => {
   if (from && to) {
     const recurringTasks = db
       .prepare(
-        `SELECT t.id, t.title, t.due_date, t.priority, t.project_id, t.recurrence, t.recurrence_interval_days, t.recurrence_days, t.recurrence_end_date, p.color AS project_color
+        `SELECT t.id, t.title, t.due_date, t.recurrence_start_date, t.priority, t.project_id, t.recurrence, t.recurrence_interval_days, t.recurrence_days, t.recurrence_end_date, p.color AS project_color
          FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
-         WHERE t.status != 'done' AND t.due_date IS NOT NULL AND t.recurrence IN ('daily','weekly','interval','custom_days')`
+         WHERE t.status != 'done' AND (t.due_date IS NOT NULL OR t.recurrence_start_date IS NOT NULL) AND t.recurrence IN ('daily','weekly','interval','custom_days')`
       )
       .all() as any[];
     const rangeStartIso = from.slice(0, 10);
     const rangeEndIso = to.slice(0, 10);
     for (const t of recurringTasks) {
-      const anchorIso = t.due_date.slice(0, 10);
+      // The pattern counts from recurrence_start_date if the user set one explicitly (a Starts
+      // field decoupled from Due), otherwise Due date doubles as the anchor like before.
+      const anchorIso = (t.recurrence_start_date ?? t.due_date).slice(0, 10);
       const customDays: number[] | null = t.recurrence_days ? JSON.parse(t.recurrence_days) : null;
       for (let d = new Date(`${rangeStartIso}T00:00:00Z`); d.toISOString().slice(0, 10) <= rangeEndIso; d.setUTCDate(d.getUTCDate() + 1)) {
         const iso = d.toISOString().slice(0, 10);

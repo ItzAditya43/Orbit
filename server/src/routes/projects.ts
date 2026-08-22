@@ -8,8 +8,8 @@ projectsRouter.get("/", (_req, res) => {
   const rows = db
     .prepare(
       `SELECT p.*,
-        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'open') AS open_task_count,
-        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') AS done_task_count
+        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.deleted_at IS NULL AND t.status = 'open') AS open_task_count,
+        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.deleted_at IS NULL AND t.status = 'done') AS done_task_count
        FROM projects p WHERE p.is_archived = 0 AND p.deleted_at IS NULL ORDER BY p.created_at ASC`
     )
     .all();

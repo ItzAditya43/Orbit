@@ -53,6 +53,7 @@ export interface Task {
   recurrence?: string | null;
   recurrence_interval_days?: number | null;
   recurrence_days?: number[] | null;
+  recurrence_start_date?: string | null;
   recurrence_end_date?: string | null;
   deleted_at?: string | null;
   color?: string | null;
@@ -154,8 +155,15 @@ export const api = {
     removePermanent: (id: string) => req<void>(`/projects/${id}?permanent=true`, { method: "DELETE" }),
   },
   tags: {
-    list: () => req<Tag[]>(`/tags`),
+    list: () => req<(Tag & { task_count: number; goal_count: number; habit_count: number })[]>(`/tags`),
     create: (body: { name: string; color?: string }) => req<Tag>(`/tags`, { method: "POST", body: JSON.stringify(body) }),
+    remove: (id: string) => req<void>(`/tags/${id}`, { method: "DELETE" }),
+    items: (id: string) =>
+      req<{ tasks: any[]; goals: any[]; habits: any[] }>(`/tags/${id}/items`),
+    addItem: (id: string, kind: "task" | "goal" | "habit", itemId: string) =>
+      req<{ ok: boolean }>(`/tags/${id}/items`, { method: "POST", body: JSON.stringify({ kind, itemId }) }),
+    removeItem: (id: string, kind: "task" | "goal" | "habit", itemId: string) =>
+      req<void>(`/tags/${id}/items/${kind}/${itemId}`, { method: "DELETE" }),
   },
   focusSessions: {
     list: () => req<any[]>(`/focus-sessions`),

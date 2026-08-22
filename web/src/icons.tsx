@@ -223,3 +223,10 @@ export const FilterIcon = (p: IconProps) => (
     <path d="M4 5h16M7 12h10M10.5 19h3" />
   </svg>
 );
+
+export const TagIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12.5 4H5a1 1 0 0 0-1 1v7.5a1 1 0 0 0 .29.71l8.5 8.5a1 1 0 0 0 1.42 0l7.5-7.5a1 1 0 0 0 0-1.42l-8.5-8.5A1 1 0 0 0 12.5 4Z" />
+    <circle cx="8.5" cy="8.5" r="1.25" fill="currentColor" stroke="none" />
+  </svg>
+);

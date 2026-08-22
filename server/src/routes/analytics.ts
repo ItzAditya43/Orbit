@@ -9,22 +9,22 @@ analyticsRouter.get("/summary", (req, res) => {
   const fromClause = from ? "AND day >= ?" : "";
   const toClause = to ? "AND day <= ?" : "";
 
-  const totalOpen = (db.prepare("SELECT COUNT(*) c FROM tasks WHERE status = 'open'").get() as any).c;
-  const totalDone = (db.prepare("SELECT COUNT(*) c FROM tasks WHERE status = 'done'").get() as any).c;
+  const totalOpen = (db.prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open'").get() as any).c;
+  const totalDone = (db.prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'done'").get() as any).c;
   const overdue = (
     db
-      .prepare("SELECT COUNT(*) c FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < date('now')")
+      .prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < date('now')")
       .get() as any
   ).c;
   const estimateVsActual = db
     .prepare(
-      `SELECT id, title, estimate_minutes, actual_minutes FROM tasks WHERE status = 'done' AND estimate_minutes IS NOT NULL ORDER BY completed_at DESC LIMIT 20`
+      `SELECT id, title, estimate_minutes, actual_minutes FROM tasks WHERE deleted_at IS NULL AND status = 'done' AND estimate_minutes IS NOT NULL ORDER BY completed_at DESC LIMIT 20`
     )
     .all();
   const completedByDayParams = [from, to].filter(Boolean);
   const completedByDay = db
     .prepare(
-      `SELECT day, COUNT(*) AS count FROM (SELECT substr(completed_at, 1, 10) AS day FROM tasks WHERE completed_at IS NOT NULL)
+      `SELECT day, COUNT(*) AS count FROM (SELECT substr(completed_at, 1, 10) AS day FROM tasks WHERE deleted_at IS NULL AND completed_at IS NOT NULL)
        WHERE 1=1 ${fromClause} ${toClause} GROUP BY day ORDER BY day DESC LIMIT ?`
     )
     .all(...completedByDayParams, days);
@@ -40,7 +40,7 @@ analyticsRouter.get("/summary", (req, res) => {
     .prepare(
       `SELECT p.name, COUNT(t.id) AS completed_count
        FROM tasks t JOIN projects p ON p.id = t.project_id
-       WHERE t.status = 'done' GROUP BY p.id ORDER BY completed_count DESC`
+       WHERE t.deleted_at IS NULL AND t.status = 'done' GROUP BY p.id ORDER BY completed_count DESC`
     )
     .all();
 

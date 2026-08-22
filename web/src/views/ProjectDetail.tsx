@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
 import { QuickAdd } from "../components/QuickAdd";
@@ -16,6 +16,7 @@ const COLUMNS: { status: Task["status"]; label: string }[] = [
 
 const PRIORITY_ORDER: Task["priority"][] = ["urgent", "high", "medium", "low", "none"];
 const PRIORITY_LABEL: Record<string, string> = { urgent: "Urgent", high: "High", medium: "Medium", low: "Low", none: "No priority" };
+const PROJECT_COLORS = ["#f87171", "#fb923c", "#fbbf24", "#4ade80", "#22d3ee", "#818cf8", "#c084fc", "#f472b6"];
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -24,6 +25,17 @@ export default function ProjectDetail() {
   const toast = useToastStore((s) => s.push);
   const [view, setView] = useState<"list" | "board">("list");
   const [swimlanes, setSwimlanes] = useState(false);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!colorPickerOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) setColorPickerOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [colorPickerOpen]);
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projects.list });
   const project = projects.find((p) => p.id === id);
   const { data: tasks = [], isLoading } = useQuery({
@@ -57,6 +69,12 @@ export default function ProjectDetail() {
     else await api.tasks.update(task.id, { status });
     invalidate();
   };
+  const setColor = async (color: string) => {
+    if (!id) return;
+    await api.projects.update(id, { color });
+    setColorPickerOpen(false);
+    invalidate();
+  };
 
   return (
     <div className="max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto p-8 space-y-6">
@@ -65,7 +83,28 @@ export default function ProjectDetail() {
       </Link>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full" style={{ background: project?.color ?? "#999" }} />
+          <div className="relative" ref={colorPickerRef}>
+            <button
+              type="button"
+              onClick={() => setColorPickerOpen((v) => !v)}
+              className="h-3 w-3 rounded-full"
+              style={{ background: project?.color ?? "#999" }}
+              title="Change project color"
+            />
+            {colorPickerOpen && (
+              <div className="absolute z-50 top-full left-0 mt-1.5 flex gap-1 p-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-lg">
+                {PROJECT_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    className="h-5 w-5 rounded-full"
+                    style={{ background: c, outline: project?.color === c ? "2px solid currentColor" : "none", outlineOffset: 1 }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
           <h1 className="text-xl font-semibold">{project?.name ?? "Project"}</h1>
           <Link to={`/projects/${id}/hub`} className="text-xs text-neutral-400 hover:underline ml-2">
             Hub →

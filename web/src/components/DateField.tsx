@@ -29,7 +29,9 @@ export function DateField({
 }) {
   const [open, setOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState(() => (value ? fromISODate(value) : new Date()));
+  const [align, setAlign] = useState<"left" | "right">("left");
   const ref = useRef<HTMLDivElement>(null);
+  const PANEL_WIDTH = 224; // w-56
 
   useEffect(() => {
     if (!open) return;
@@ -59,6 +61,12 @@ export function DateField({
         type="button"
         onClick={() => {
           setViewMonth(value ? fromISODate(value) : new Date());
+          // Anchoring the panel to the button's left edge overflows off-screen for fields
+          // near the right side of a packed row (e.g. "Ends" in the recurrence row) — flip
+          // to right-aligned when there isn't enough viewport room to the right.
+          const rect = ref.current?.getBoundingClientRect();
+          if (rect && rect.left + PANEL_WIDTH > window.innerWidth) setAlign("right");
+          else setAlign("left");
           setOpen((o) => !o);
         }}
         className={className}
@@ -66,7 +74,9 @@ export function DateField({
         {formatLabel(value ?? "")}
       </button>
       {open && (
-        <div className="absolute z-50 top-full left-0 mt-1 w-56 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-lg p-2 text-xs">
+        <div
+          className={`absolute z-50 top-full ${align === "left" ? "left-0" : "right-0"} mt-1 w-56 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-lg p-2 text-xs`}
+        >
           <div className="flex items-center justify-between mb-1.5">
             <button type="button" onClick={() => setViewMonth(new Date(year, month - 1, 1))} className="px-1.5 py-0.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800">
               ‹

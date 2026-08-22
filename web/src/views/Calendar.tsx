@@ -23,7 +23,12 @@ function addDays(d: Date, n: number) {
   return r;
 }
 function key(d: Date) {
-  return d.toISOString().slice(0, 10);
+  // Local date components, not toISOString() — toISOString() converts to UTC first, which
+  // shifts the date by a day in any timezone ahead of UTC (e.g. IST) for a local-midnight
+  // Date object. That mismatched grid cells against server dates (plain "YYYY-MM-DD" strings,
+  // no timezone) by one day — an event dated the 23rd would land under the cell labeled 24th.
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 function isSameMonth(a: Date, b: Date) {
   return a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();

@@ -177,6 +177,7 @@ tasksRouter.post("/", (req, res) => {
     recurrence,
     recurrenceIntervalDays,
     recurrenceDays,
+    recurrenceStartDate,
     recurrenceEndDate,
   } = req.body ?? {};
   if (!title || typeof title !== "string") return res.status(400).json({ error: "title is required" });
@@ -184,7 +185,7 @@ tasksRouter.post("/", (req, res) => {
   const id = randomUUID();
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO tasks (id, title, notes, project_id, parent_id, priority, due_date, start_date, scheduled_at, estimate_minutes, is_inbox, color, energy, recurrence, recurrence_interval_days, recurrence_days, recurrence_end_date, created_at, updated_at)
+    `INSERT INTO tasks (id, title, notes, project_id, parent_id, priority, due_date, start_date, scheduled_at, estimate_minutes, is_inbox, color, energy, recurrence, recurrence_interval_days, recurrence_days, recurrence_start_date, recurrence_end_date, created_at, updated_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     id,
@@ -203,6 +204,7 @@ tasksRouter.post("/", (req, res) => {
     recurrence ?? null,
     recurrenceIntervalDays ?? null,
     Array.isArray(recurrenceDays) ? JSON.stringify(recurrenceDays) : null,
+    recurrenceStartDate ?? null,
     recurrenceEndDate ?? null,
     now,
     now
@@ -231,6 +233,7 @@ const PATCHABLE_FIELDS: Record<string, string> = {
   recurrence: "recurrence",
   recurrenceIntervalDays: "recurrence_interval_days",
   recurrenceDays: "recurrence_days",
+  recurrenceStartDate: "recurrence_start_date",
   recurrenceEndDate: "recurrence_end_date",
   color: "color",
   energy: "energy",
@@ -302,11 +305,11 @@ tasksRouter.post("/:id/complete", (req, res) => {
     if (!task.recurrence_end_date || nextDue <= task.recurrence_end_date) {
       const newId = randomUUID();
       db.prepare(
-        `INSERT INTO tasks (id, title, notes, project_id, priority, due_date, recurrence, recurrence_interval_days, recurrence_days, recurrence_end_date, estimate_minutes, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO tasks (id, title, notes, project_id, priority, due_date, recurrence, recurrence_interval_days, recurrence_days, recurrence_start_date, recurrence_end_date, estimate_minutes, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(
         newId, task.title, task.notes, task.project_id, task.priority, nextDue,
-        task.recurrence, task.recurrence_interval_days, task.recurrence_days, task.recurrence_end_date, task.estimate_minutes, now, now
+        task.recurrence, task.recurrence_interval_days, task.recurrence_days, task.recurrence_start_date, task.recurrence_end_date, task.estimate_minutes, now, now
       );
     }
   }
@@ -340,13 +343,13 @@ tasksRouter.delete("/:id", (req, res) => {
 tasksRouter.get("/:id/dependencies", (req, res) => {
   const blockedBy = db
     .prepare(
-      `SELECT t.* FROM tasks t JOIN task_dependencies d ON d.blocks_task_id = t.id WHERE d.task_id = ?`
+      `SELECT t.* FROM tasks t JOIN task_dependencies d ON d.blocks_task_id = t.id WHERE d.task_id = ? AND t.deleted_at IS NULL`
     )
     .all(req.params.id)
     .map(hydrate);
   const blocks = db
     .prepare(
-      `SELECT t.* FROM tasks t JOIN task_dependencies d ON d.task_id = t.id WHERE d.blocks_task_id = ?`
+      `SELECT t.* FROM tasks t JOIN task_dependencies d ON d.task_id = t.id WHERE d.blocks_task_id = ? AND t.deleted_at IS NULL`
     )
     .all(req.params.id)
     .map(hydrate);

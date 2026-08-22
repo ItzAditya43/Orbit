@@ -5,11 +5,11 @@ export const reviewRouter = Router();
 
 reviewRouter.get("/daily", (_req, res) => {
   const today = new Date().toISOString().slice(0, 10);
-  const completed = db.prepare("SELECT id, title FROM tasks WHERE substr(completed_at, 1, 10) = ?").all(today);
+  const completed = db.prepare("SELECT id, title FROM tasks WHERE deleted_at IS NULL AND substr(completed_at, 1, 10) = ?").all(today);
   const carriedOver = db
-    .prepare("SELECT id, title, due_date FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < ?")
+    .prepare("SELECT id, title, due_date FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < ?")
     .all(today);
-  const dueToday = db.prepare("SELECT id, title FROM tasks WHERE status = 'open' AND due_date = ?").all(today);
+  const dueToday = db.prepare("SELECT id, title FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date = ?").all(today);
   const focusMinutes = (
     db
       .prepare(
@@ -33,10 +33,14 @@ reviewRouter.get("/daily", (_req, res) => {
 
 reviewRouter.get("/weekly", (_req, res) => {
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-  const completed = db.prepare("SELECT id, title, completed_at FROM tasks WHERE completed_at >= ? ORDER BY completed_at DESC").all(weekAgo);
-  const created = (db.prepare("SELECT COUNT(*) c FROM tasks WHERE created_at >= ?").get(weekAgo) as any).c;
+  const completed = db
+    .prepare("SELECT id, title, completed_at FROM tasks WHERE deleted_at IS NULL AND completed_at >= ? ORDER BY completed_at DESC")
+    .all(weekAgo);
+  const created = (db.prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND created_at >= ?").get(weekAgo) as any).c;
   const stillOpen = db
-    .prepare("SELECT id, title, due_date FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < date('now') ORDER BY due_date ASC")
+    .prepare(
+      "SELECT id, title, due_date FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < date('now') ORDER BY due_date ASC"
+    )
     .all();
   const focusMinutes = (
     db
@@ -49,8 +53,8 @@ reviewRouter.get("/weekly", (_req, res) => {
   const projectProgress = db
     .prepare(
       `SELECT p.name,
-        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done' AND t.completed_at >= ?) AS completed_this_week,
-        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'open') AS still_open
+        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.deleted_at IS NULL AND t.status = 'done' AND t.completed_at >= ?) AS completed_this_week,
+        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.deleted_at IS NULL AND t.status = 'open') AS still_open
        FROM projects p WHERE p.is_archived = 0`
     )
     .all(weekAgo);

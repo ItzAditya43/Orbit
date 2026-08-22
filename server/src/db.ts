@@ -129,6 +129,18 @@ CREATE TABLE IF NOT EXISTS habits (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS goal_tags (
+  goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  PRIMARY KEY (goal_id, tag_id)
+);
+
+CREATE TABLE IF NOT EXISTS habit_tags (
+  habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+  tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  PRIMARY KEY (habit_id, tag_id)
+);
+
 CREATE TABLE IF NOT EXISTS habit_logs (
   id TEXT PRIMARY KEY,
   habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
@@ -278,6 +290,7 @@ if (!taskColumnNames.has("energy")) db.exec("ALTER TABLE tasks ADD COLUMN energy
 if (!taskColumnNames.has("recurrence_interval_days")) db.exec("ALTER TABLE tasks ADD COLUMN recurrence_interval_days INTEGER");
 if (!taskColumnNames.has("recurrence_days")) db.exec("ALTER TABLE tasks ADD COLUMN recurrence_days TEXT"); // JSON array of 0(Sun)-6(Sat)
 if (!taskColumnNames.has("recurrence_end_date")) db.exec("ALTER TABLE tasks ADD COLUMN recurrence_end_date TEXT"); // last day (inclusive) to generate occurrences for; NULL = no end
+if (!taskColumnNames.has("recurrence_start_date")) db.exec("ALTER TABLE tasks ADD COLUMN recurrence_start_date TEXT"); // anchor day the repeat pattern counts from; NULL = falls back to due_date
 
 if (!notesColumnNames.has("deleted_at")) db.exec("ALTER TABLE notes ADD COLUMN deleted_at TEXT");
 

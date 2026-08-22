@@ -29,6 +29,7 @@ import {
   SearchIcon,
   PlusIcon,
   FilterIcon,
+  TagIcon,
   TrashIcon,
   GridIcon,
   PencilIcon,
@@ -51,6 +52,7 @@ import Automations from "./views/Automations";
 import Settings from "./views/Settings";
 import Review from "./views/Review";
 import Filters from "./views/Filters";
+import Tags from "./views/Tags";
 import Trash from "./views/Trash";
 import Matrix from "./views/Matrix";
 import HabitMatrix from "./views/HabitMatrix";
@@ -89,6 +91,7 @@ const NAV_GROUPS = [
       { to: "/analytics", label: "Analytics", icon: BarChartIcon },
       { to: "/review", label: "Review", icon: BarChartIcon },
       { to: "/filters", label: "Filters", icon: FilterIcon },
+      { to: "/tags", label: "Tags", icon: TagIcon },
       { to: "/search", label: "Search", icon: SearchIcon },
       { to: "/trash", label: "Trash", icon: TrashIcon },
     ],
@@ -209,6 +212,7 @@ export default function App() {
           <Route path="/review" element={<Review />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/filters" element={<Filters />} />
+          <Route path="/tags" element={<Tags />} />
           <Route path="/trash" element={<Trash />} />
           <Route path="/search" element={<Search />} />
         </Routes>
