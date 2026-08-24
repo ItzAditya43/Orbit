@@ -22,12 +22,20 @@ const RANGES = [
   { label: "90 days", days: 90 },
 ];
 
+// Local Y/M/D components, not toISOString() — toISOString() converts to UTC first, which
+// shifts the date back a day in any timezone ahead of UTC, silently excluding "today" from
+// range-scoped stats. Same bug and same fix as Calendar.tsx's day-key generation.
+function localISODate(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export default function Analytics() {
   const [rangeDays, setRangeDays] = useState(14);
-  const to = new Date().toISOString().slice(0, 10);
-  const from = new Date(Date.now() - rangeDays * 86400000).toISOString().slice(0, 10);
+  const to = localISODate(new Date());
+  const from = localISODate(new Date(Date.now() - rangeDays * 86400000));
   const { data, isLoading } = useQuery({ queryKey: ["analytics", from, to], queryFn: () => api.analytics.summary({ from, to }) });
-  const heatmapFrom = new Date(Date.now() - 112 * 86400000).toISOString().slice(0, 10);
+  const heatmapFrom = localISODate(new Date(Date.now() - 112 * 86400000));
   const { data: heatmapData } = useQuery({ queryKey: ["analytics", "heatmap"], queryFn: () => api.analytics.summary({ from: heatmapFrom, to }) });
 
   if (isLoading || !data) return <div className="p-8 text-sm text-neutral-400">Loading...</div>;
@@ -60,7 +68,7 @@ export default function Analytics() {
         </div>
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
           <p className="text-2xl font-semibold">{data.totalDone}</p>
-          <p className="text-xs text-neutral-400">Completed</p>
+          <p className="text-xs text-neutral-400">Completed (range)</p>
         </div>
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
           <p className="text-2xl font-semibold">{data.overdue}</p>
@@ -84,7 +92,7 @@ export default function Analytics() {
         </div>
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
           <p className="text-2xl font-semibold">{data.notes.total}</p>
-          <p className="text-xs text-neutral-400">Notes</p>
+          <p className="text-xs text-neutral-400">Notes (range)</p>
         </div>
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
           <p className="text-2xl font-semibold">{data.upcomingEvents}</p>
@@ -94,8 +102,9 @@ export default function Analytics() {
 
       {heatmapData && (
         <div className="space-y-2">
-          <p className="text-sm font-medium">Completion activity (16 weeks)</p>
-          <Heatmap data={heatmapData.completedByDay.map((d: any) => ({ date: d.day, count: d.count }))} />
+          <p className="text-sm font-medium">Activity (16 weeks)</p>
+          <p className="text-xs text-neutral-400 -mt-1.5">Tasks completed, habits logged, notes written, workflow edits — combined.</p>
+          <Heatmap data={heatmapData.activityByDay.map((d: any) => ({ date: d.day, count: d.count }))} />
         </div>
       )}
 

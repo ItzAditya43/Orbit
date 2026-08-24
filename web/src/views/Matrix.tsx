@@ -6,7 +6,13 @@ import { api, type Task } from "../api";
 // for goals), not a separate flag — dragging an item into a quadrant writes back the field
 // combination that quadrant represents, so the matrix stays a live view of the same data
 // everywhere else in the app, not a parallel system that can drift out of sync.
+const RECURRING_TYPES = ["daily", "weekly", "interval", "custom_days"];
 function isTaskUrgent(t: Task) {
+  // A recurring task's due_date is a fixed anchor that never advances until it's completed, so
+  // comparing it against "today" made every open recurring task look permanently overdue/urgent
+  // regardless of the actual day. Treat it as always current instead — it recurs, so it's
+  // always "now" in some sense — rather than reading a stale, meaningless date comparison.
+  if (t.recurrence && RECURRING_TYPES.includes(t.recurrence)) return true;
   if (!t.due_date) return false;
   const today = new Date().toISOString().slice(0, 10);
   return t.due_date <= today;
@@ -95,10 +101,15 @@ export default function Matrix() {
                     key={t.id}
                     draggable
                     onDragStart={(e) => e.dataTransfer.setData("text/task-id", t.id)}
-                    className="text-sm px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 cursor-grab active:cursor-grabbing truncate"
+                    className="text-sm px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 cursor-grab active:cursor-grabbing flex items-center gap-1.5 min-w-0"
                     title={t.title}
                   >
-                    {t.title}
+                    <span className="truncate">{t.title}</span>
+                    {(t.tags ?? []).map((tag: any) => (
+                      <span key={tag.id} className="text-[9px] px-1 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-500 shrink-0">
+                        {tag.name}
+                      </span>
+                    ))}
                   </div>
                 ))}
                 {goalItems.map((g: any) => (
@@ -106,11 +117,16 @@ export default function Matrix() {
                     key={g.id}
                     draggable
                     onDragStart={(e) => e.dataTransfer.setData("text/goal-id", g.id)}
-                    className="text-sm px-2.5 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-900 cursor-grab active:cursor-grabbing truncate flex items-center gap-1.5"
+                    className="text-sm px-2.5 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-900 cursor-grab active:cursor-grabbing flex items-center gap-1.5 min-w-0"
                     title={g.title}
                   >
                     <span className="text-[9px] uppercase tracking-wide text-violet-500 shrink-0">Goal</span>
-                    {g.title}
+                    <span className="truncate">{g.title}</span>
+                    {(g.tags ?? []).map((tag: any) => (
+                      <span key={tag.id} className="text-[9px] px-1 py-0.5 rounded bg-violet-100 dark:bg-violet-900/50 text-violet-500 shrink-0">
+                        {tag.name}
+                      </span>
+                    ))}
                   </div>
                 ))}
                 {taskItems.length === 0 && goalItems.length === 0 && <p className="text-xs text-neutral-300 dark:text-neutral-700">Empty</p>}

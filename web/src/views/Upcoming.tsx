@@ -1,15 +1,19 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
 import { EmptyState } from "../components/EmptyState";
 import { CalendarDaysIcon } from "../icons";
+import { TagFilterDropdown, matchesTag } from "../components/TagFilterDropdown";
 
 export default function Upcoming() {
   const qc = useQueryClient();
-  const { data: tasks = [], isLoading } = useQuery({
+  const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ["tasks", "upcoming"],
     queryFn: () => api.tasks.list({ view: "upcoming" }),
   });
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const tasks = allTasks.filter((t) => matchesTag(t, tagFilter));
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
   const onToggle = async (task: Task) => {
@@ -30,7 +34,10 @@ export default function Upcoming() {
 
   return (
     <div className="max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto p-8 space-y-6">
-      <h1 className="text-xl font-semibold">Upcoming</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Upcoming</h1>
+        <TagFilterDropdown value={tagFilter} onChange={setTagFilter} />
+      </div>
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
       {[...byDate.entries()].map(([date, items]) => (
         <div key={date} className="space-y-2">

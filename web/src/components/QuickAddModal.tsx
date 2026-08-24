@@ -19,7 +19,7 @@ export function QuickAddModal() {
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: templates = [] } = useQuery({ queryKey: ["task-templates"], queryFn: api.taskTemplates.list, enabled: isOpen });
-  const { data: boundaries = [] } = useQuery({ queryKey: ["boundaries"], queryFn: api.boundaries.list, enabled: isOpen });
+  const { data: boundaries = [] } = useQuery({ queryKey: ["boundaries"], queryFn: () => api.boundaries.list(), enabled: isOpen });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projects.list, enabled: isOpen });
   const { data: tags = [] } = useQuery({ queryKey: ["tags"], queryFn: api.tags.list, enabled: isOpen });
 

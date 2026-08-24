@@ -254,6 +254,25 @@ tasksRouter.patch("/:id", (req, res) => {
       values.push(value);
     }
   }
+  // A task that just gained a per-day recurrence (daily/weekly/interval/custom_days) plus a
+  // real anchor date is now genuinely scheduled on the Calendar going forward — leaving
+  // is_inbox untouched left it stuck showing in the Unscheduled panel forever even though it's
+  // no longer unscheduled. Only auto-clear it if the caller didn't already say what isInbox
+  // should be in this same request.
+  if (!("isInbox" in req.body)) {
+    const nextRecurrence = "recurrence" in req.body ? req.body.recurrence : (existing as any).recurrence;
+    const nextDueDate = "dueDate" in req.body ? req.body.dueDate : (existing as any).due_date;
+    const nextStartDate = "recurrenceStartDate" in req.body ? req.body.recurrenceStartDate : (existing as any).recurrence_start_date;
+    if (
+      nextRecurrence &&
+      nextRecurrence !== "none" &&
+      ["daily", "weekly", "interval", "custom_days"].includes(nextRecurrence) &&
+      (nextDueDate || nextStartDate)
+    ) {
+      updates.push("is_inbox = ?");
+      values.push(0);
+    }
+  }
   if (updates.length) {
     values.push(new Date().toISOString(), req.params.id);
     db.prepare(`UPDATE tasks SET ${updates.join(", ")}, updated_at = ? WHERE id = ?`).run(...values);

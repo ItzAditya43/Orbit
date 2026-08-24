@@ -10,10 +10,18 @@ analyticsRouter.get("/summary", (req, res) => {
   const toClause = to ? "AND day <= ?" : "";
 
   const totalOpen = (db.prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open'").get() as any).c;
-  const totalDone = (db.prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'done'").get() as any).c;
+  // Range-scoped (completed within from/to), not all-time — sits next to other range-scoped
+  // tiles like "Time tracked (range)" and shouldn't be the only one that ignores the toggle.
+  const doneClauses = ["deleted_at IS NULL", "status = 'done'"];
+  const doneParams: unknown[] = [];
+  if (from) { doneClauses.push("completed_at >= ?"); doneParams.push(from); }
+  if (to) { doneClauses.push("completed_at <= ?"); doneParams.push(to + "T23:59:59"); }
+  const totalDone = (db.prepare(`SELECT COUNT(*) c FROM tasks WHERE ${doneClauses.join(" AND ")}`).get(...doneParams) as any).c;
   const overdue = (
     db
-      .prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < date('now')")
+      .prepare(
+        "SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < date('now') AND (recurrence IS NULL OR recurrence NOT IN ('daily','weekly','interval','custom_days'))"
+      )
       .get() as any
   ).c;
   const estimateVsActual = db
@@ -25,6 +33,22 @@ analyticsRouter.get("/summary", (req, res) => {
   const completedByDay = db
     .prepare(
       `SELECT day, COUNT(*) AS count FROM (SELECT substr(completed_at, 1, 10) AS day FROM tasks WHERE deleted_at IS NULL AND completed_at IS NOT NULL)
+       WHERE 1=1 ${fromClause} ${toClause} GROUP BY day ORDER BY day DESC LIMIT ?`
+    )
+    .all(...completedByDayParams, days);
+  // The "Completion activity" heatmap only ever reflected task completions — habit logs, notes
+  // written, and workflow (board) edits all count as real activity too and were invisible here.
+  const activityByDay = db
+    .prepare(
+      `SELECT day, COUNT(*) AS count FROM (
+         SELECT substr(completed_at, 1, 10) AS day FROM tasks WHERE deleted_at IS NULL AND completed_at IS NOT NULL
+         UNION ALL
+         SELECT date FROM habit_logs
+         UNION ALL
+         SELECT substr(created_at, 1, 10) FROM notes WHERE deleted_at IS NULL
+         UNION ALL
+         SELECT substr(updated_at, 1, 10) FROM boards
+       )
        WHERE 1=1 ${fromClause} ${toClause} GROUP BY day ORDER BY day DESC LIMIT ?`
     )
     .all(...completedByDayParams, days);
@@ -84,7 +108,11 @@ analyticsRouter.get("/summary", (req, res) => {
     goalRows.reduce((acc: Record<string, number>, g) => ((acc[g.horizon] = (acc[g.horizon] ?? 0) + 1), acc), {})
   ).map(([horizon, count]) => ({ horizon, count }));
 
-  const totalNotes = (db.prepare("SELECT COUNT(*) c FROM notes").get() as any).c;
+  const notesClauses = ["deleted_at IS NULL"];
+  const notesParams: unknown[] = [];
+  if (from) { notesClauses.push("created_at >= ?"); notesParams.push(from); }
+  if (to) { notesClauses.push("created_at <= ?"); notesParams.push(to + "T23:59:59"); }
+  const totalNotes = (db.prepare(`SELECT COUNT(*) c FROM notes WHERE ${notesClauses.join(" AND ")}`).get(...notesParams) as any).c;
 
   const timeTrackedMinutes = (
     db
@@ -112,6 +140,7 @@ analyticsRouter.get("/summary", (req, res) => {
     overdue,
     estimateVsActual,
     completedByDay,
+    activityByDay,
     focusMinutesByDay,
     projectVelocity,
     rangeDays: days,

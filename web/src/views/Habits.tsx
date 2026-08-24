@@ -248,7 +248,14 @@ function HabitCard({
     >
     <div className="flex items-center justify-between">
       <div>
-        <p className="text-sm font-medium">{h.title}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-medium">{h.title}</p>
+          {(h.tags ?? []).map((t: any) => (
+            <span key={t.id} className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
+              {t.name}
+            </span>
+          ))}
+        </div>
         <p className="text-xs text-neutral-400">
           {!h.dueToday ? (
             <span>Not scheduled today{schedule ? ` · ${schedule}` : ""}</span>

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useUIStore } from "./store";
 import { useQuickAddStore } from "./quickAddStore";
@@ -31,10 +31,13 @@ import {
   FilterIcon,
   TagIcon,
   TrashIcon,
+  ChevronDownIcon,
   GridIcon,
+  LayoutDashboardIcon,
   PencilIcon,
 } from "./icons";
 import Today from "./views/Today";
+import BoardDashboard from "./views/Board";
 import Inbox from "./views/Inbox";
 import Upcoming from "./views/Upcoming";
 import Projects from "./views/Projects";
@@ -64,6 +67,7 @@ const NAV_GROUPS = [
     label: "Plan",
     items: [
       { to: "/", label: "Today", icon: SunIcon, end: true },
+      { to: "/board", label: "Board", icon: LayoutDashboardIcon },
       { to: "/inbox", label: "Inbox", icon: InboxIcon },
       { to: "/upcoming", label: "Upcoming", icon: CalendarDaysIcon },
       { to: "/calendar", label: "Calendar", icon: CalendarDaysIcon },
@@ -80,7 +84,7 @@ const NAV_GROUPS = [
       { to: "/goals", label: "Goals", icon: RocketIcon },
       { to: "/habits", label: "Habits", icon: RepeatIcon },
       { to: "/notes", label: "Notes", icon: NoteIcon },
-      { to: "/boards", label: "Boards", icon: PencilIcon },
+      { to: "/boards", label: "Workflow", icon: PencilIcon },
     ],
   },
   {
@@ -98,10 +102,29 @@ const NAV_GROUPS = [
   },
 ];
 
+function useCollapsedGroups() {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("orbit-nav-collapsed") ?? "{}");
+    } catch {
+      return {};
+    }
+  });
+  const toggle = (label: string) => {
+    setCollapsed((c) => {
+      const next = { ...c, [label]: !c[label] };
+      localStorage.setItem("orbit-nav-collapsed", JSON.stringify(next));
+      return next;
+    });
+  };
+  return { collapsed, toggle };
+}
+
 export default function App() {
   const { theme, toggleTheme } = useUIStore();
   const { open: openQuickAdd } = useQuickAddStore();
   const location = useLocation();
+  const { collapsed, toggle: toggleGroup } = useCollapsedGroups();
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -139,8 +162,14 @@ export default function App() {
         <nav className="flex-1 space-y-4">
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
-              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">{group.label}</p>
-              <div className="space-y-0.5">
+              <button
+                onClick={() => toggleGroup(group.label)}
+                className="w-full flex items-center gap-1 px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+              >
+                <ChevronDownIcon size={11} className={`transition-transform ${collapsed[group.label] ? "-rotate-90" : ""}`} />
+                {group.label}
+              </button>
+              <div className={`space-y-0.5 ${collapsed[group.label] ? "hidden" : ""}`}>
                 {group.items.map((item) => {
                   const isActive = item.end ? location.pathname === item.to : location.pathname.startsWith(item.to);
                   const Icon = item.icon;
@@ -191,6 +220,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto relative">
         <Routes>
           <Route path="/" element={<Today />} />
+          <Route path="/board" element={<BoardDashboard />} />
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/upcoming" element={<Upcoming />} />
           <Route path="/calendar" element={<Calendar />} />

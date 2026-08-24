@@ -6,7 +6,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, TrashIcon } from "../icons";
 import { TaskContextMenu } from "./TaskContextMenu";
 
-function dueBadge(due: string | null) {
+const RECURRING_TYPES = ["daily", "weekly", "interval", "custom_days"];
+
+// A recurring task's due_date is just the anchor it was created with — it never advances until
+// the task is completed (which rolls a fresh row forward with a new due_date), so an open daily
+// task sits with a due_date from whenever it started forever. Comparing that raw column against
+// "today" wrongly called it "Overdue" every day; recurring tasks are always "current" until
+// you complete today's occurrence, so they get a Repeats badge instead of an Overdue one.
+function dueBadge(due: string | null, recurrence?: string | null) {
+  if (recurrence && RECURRING_TYPES.includes(recurrence)) {
+    return { label: "Repeats", cls: "bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400" };
+  }
   if (!due) return null;
   const today = new Date().toISOString().slice(0, 10);
   if (due < today) return { label: "Overdue", cls: "bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400" };
@@ -32,7 +42,7 @@ export function TaskRow({
   const qc = useQueryClient();
   const openDetail = useTaskDetailStore((s) => s.open);
   const done = task.status === "done";
-  const badge = dueBadge(task.due_date);
+  const badge = dueBadge(task.due_date, task.recurrence);
   const subtaskCount = task.subtasks?.length ?? 0;
 
   const setPriority = async (p: Task["priority"]) => {

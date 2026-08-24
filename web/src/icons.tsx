@@ -152,6 +152,15 @@ export const GridIcon = (p: IconProps) => (
   </svg>
 );
 
+export const LayoutDashboardIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="3" y="3" width="10" height="7" rx="1" />
+    <rect x="15" y="3" width="6" height="12" rx="1" />
+    <rect x="3" y="12" width="6" height="9" rx="1" />
+    <rect x="11" y="17" width="10" height="4" rx="1" />
+  </svg>
+);
+
 export const PencilIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M12 20h9" />
@@ -174,6 +183,12 @@ export const ChevronLeftIcon = (p: IconProps) => (
 export const ChevronRightIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M9 5l7 7-7 7" />
+  </svg>
+);
+
+export const ChevronDownIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m5 9 7 7 7-7" />
   </svg>
 );
 

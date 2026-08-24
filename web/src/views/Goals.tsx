@@ -12,8 +12,15 @@ function GoalCard({ goal, invalidate }: { goal: any; invalidate: () => void }) {
   return (
     <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 space-y-2">
       <div className="flex justify-between items-center">
-        <span className="text-sm font-medium">{goal.title}</span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-sm font-medium truncate">{goal.title}</span>
+          {(goal.tags ?? []).map((t: any) => (
+            <span key={t.id} className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-500 shrink-0">
+              {t.name}
+            </span>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
           <span className="text-[10px] uppercase text-neutral-400">{goal.horizon}</span>
           <button
             onClick={async () => {

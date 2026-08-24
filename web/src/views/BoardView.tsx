@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Board, type BoardElement } from "../api";
-import { ImageIcon, PencilIcon, PlusIcon, TrashIcon } from "../icons";
+import { ImageIcon, PencilIcon, PlusIcon, TrashIcon, CircleCheckIcon } from "../icons";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -37,11 +37,16 @@ function BoardList() {
     navigate(`/boards/${board.id}`);
   };
 
+  const remove = async (id: string) => {
+    await api.boards.remove(id);
+    qc.invalidateQueries({ queryKey: ["boards"] });
+  };
+
   return (
     <div className="max-w-3xl xl:max-w-4xl 2xl:max-w-5xl mx-auto p-8 space-y-6">
-      <h1 className="text-xl font-semibold">Boards</h1>
+      <h1 className="text-xl font-semibold">Workflow</h1>
       <p className="text-sm text-neutral-400">
-        A freeform canvas per project (or standalone) — sketch things out, drop in images, jot notes anywhere.
+        A freeform canvas per project (or standalone) — sketch things out, drop in images, link in tasks, jot notes anywhere.
       </p>
       <form
         onSubmit={(e) => {
@@ -53,7 +58,7 @@ function BoardList() {
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="New board name..."
+          placeholder="New workflow name..."
           className="flex-1 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
         />
         <button className="px-3 py-2 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm">Create</button>
@@ -61,17 +66,72 @@ function BoardList() {
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {boards.map((b) => (
-          <Link
-            key={b.id}
-            to={`/boards/${b.id}`}
-            className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 hover:shadow-md transition-shadow"
-          >
-            <p className="text-sm font-medium">{b.title}</p>
-            <p className="text-xs text-neutral-400 mt-1">{b.elements.length} item{b.elements.length === 1 ? "" : "s"}</p>
-          </Link>
+          <div key={b.id} className="relative group">
+            <Link
+              to={`/boards/${b.id}`}
+              className="block rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 hover:shadow-md transition-shadow"
+            >
+              <p className="text-sm font-medium pr-5">{b.title}</p>
+              <p className="text-xs text-neutral-400 mt-1">{b.elements.length} item{b.elements.length === 1 ? "" : "s"}</p>
+            </Link>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                if (confirm(`Delete "${b.title}"? This can't be undone.`)) remove(b.id);
+              }}
+              className="absolute top-3 right-3 text-neutral-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Delete workflow"
+            >
+              <TrashIcon size={14} />
+            </button>
+          </div>
         ))}
-        {boards.length === 0 && !isLoading && <p className="text-sm text-neutral-400">No boards yet — create one above.</p>}
+        {boards.length === 0 && !isLoading && <p className="text-sm text-neutral-400">No workflows yet — create one above.</p>}
       </div>
+    </div>
+  );
+}
+
+// Pulls the live task from the API rather than freezing a copy of the title/status at the
+// moment it was dropped onto the board — the whole point of linking a task in is that this
+// card reflects reality (complete it elsewhere, it shows done here too) instead of drifting.
+function TaskElementView({
+  el,
+  selected,
+  onSelect,
+}: {
+  el: Extract<BoardElement, { type: "task" }>;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const qc = useQueryClient();
+  const { data: task } = useQuery({ queryKey: ["tasks", "detail", el.taskId], queryFn: () => api.tasks.get(el.taskId) });
+  const toggle = async () => {
+    if (!task) return;
+    if (task.status === "done") await api.tasks.reopen(task.id);
+    else await api.tasks.complete(task.id);
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+  };
+  return (
+    <div
+      onMouseDown={(e) => {
+        onSelect();
+        e.stopPropagation();
+      }}
+      className={`flex items-center gap-2 w-full h-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-900 rounded-md p-2 text-sm shadow-sm ${
+        selected ? "ring-2 ring-neutral-500" : ""
+      }`}
+    >
+      {task ? (
+        <>
+          <button onClick={toggle} className="shrink-0">
+            <CircleCheckIcon size={16} className={task.status === "done" ? "text-emerald-500" : "text-neutral-300 dark:text-neutral-700"} />
+          </button>
+          <span className={`truncate ${task.status === "done" ? "line-through text-neutral-400" : ""}`}>{task.title}</span>
+        </>
+      ) : (
+        <span className="text-neutral-400">Loading task...</span>
+      )}
     </div>
   );
 }
@@ -155,17 +215,35 @@ function BoardCanvas({ board }: { board: Board }) {
     persist([...elements, el]);
   };
 
+  const addTask = (taskId: string) => {
+    const { x, y } = nextSpawnPoint();
+    const el: BoardElement = { id: uid(), type: "task", x, y, w: 220, h: 60, taskId };
+    persist([...elements, el]);
+  };
+
   const removeSelected = () => {
     if (!selectedId) return;
     persist(elements.filter((e) => e.id !== selectedId));
     setSelectedId(null);
   };
 
+  const navigate = useNavigate();
+  const deleteBoard = async () => {
+    if (!confirm(`Delete "${board.title}"? This can't be undone.`)) return;
+    await api.boards.remove(board.id);
+    qc.invalidateQueries({ queryKey: ["boards"] });
+    navigate("/boards");
+  };
+
+  const { data: allTasks = [] } = useQuery({ queryKey: ["tasks", "status", "open"], queryFn: () => api.tasks.list({ status: "open" }) });
+  const linkedTaskIds = new Set(elements.filter((e) => e.type === "task").map((e: any) => e.taskId));
+  const linkableTasks = allTasks.filter((t) => !linkedTaskIds.has(t.id));
+
   return (
     <div className="flex flex-col h-[calc(100vh-3rem)]">
       <div className="flex items-center gap-2 p-3 border-b border-neutral-200 dark:border-neutral-800">
         <Link to="/boards" className="text-sm text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
-          ← Boards
+          ← Workflow
         </Link>
         <span className="text-sm font-medium ml-2">{board.title}</span>
         <div className="flex items-center gap-1 ml-6">
@@ -210,12 +288,31 @@ function BoardCanvas({ board }: { board: Board }) {
             }}
           />
         </label>
+        {linkableTasks.length > 0 && (
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) addTask(e.target.value);
+            }}
+            className="text-xs px-2 py-1 rounded-md border border-neutral-200 dark:border-neutral-800"
+          >
+            <option value="">+ Link task...</option>
+            {linkableTasks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title}
+              </option>
+            ))}
+          </select>
+        )}
         {selectedId && (
           <button onClick={removeSelected} className="text-xs px-2 py-1 rounded-md text-red-500 flex items-center gap-1 ml-2">
             <TrashIcon size={12} /> Delete
           </button>
         )}
         <span className="text-[11px] text-neutral-400 ml-auto">Paste (Ctrl+V) an image anywhere on the board</span>
+        <button onClick={deleteBoard} className="text-xs px-2 py-1 rounded-md text-red-500 flex items-center gap-1">
+          <TrashIcon size={12} /> Delete workflow
+        </button>
       </div>
 
       <div
@@ -328,6 +425,9 @@ function BoardCanvas({ board }: { board: Board }) {
                     draggable={false}
                     className={`w-full h-full object-cover rounded-md shadow-sm ${selectedId === el.id ? "ring-2 ring-neutral-500" : ""}`}
                   />
+                )}
+                {el.type === "task" && (
+                  <TaskElementView el={el} selected={selectedId === el.id} onSelect={() => setSelectedId(el.id)} />
                 )}
               </div>
             ))}

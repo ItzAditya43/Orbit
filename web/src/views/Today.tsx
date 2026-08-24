@@ -10,6 +10,7 @@ import { SunIcon, CircleCheckIcon, TargetIcon, RepeatIcon, ZapIcon } from "../ic
 import { useQuickAddStore } from "../quickAddStore";
 import { useToastStore } from "../toastStore";
 import { Link } from "react-router-dom";
+import { TagFilterDropdown, matchesTag } from "../components/TagFilterDropdown";
 
 const PRIORITY_RANK: Record<string, number> = { none: 0, low: 1, medium: 2, high: 3, urgent: 4 };
 
@@ -34,6 +35,7 @@ export default function Today() {
   const { data: staleTasks = [] } = useQuery({ queryKey: ["tasks", "stale"], queryFn: () => api.tasks.list({ view: "stale" }) });
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
 
@@ -67,8 +69,9 @@ export default function Today() {
     toast(`"${task.title}" deleted`);
   };
 
-  const open = tasks.filter((t) => t.status !== "done");
-  const done = tasks.filter((t) => t.status === "done");
+  const tagFiltered = tasks.filter((t) => matchesTag(t, tagFilter));
+  const open = tagFiltered.filter((t) => t.status !== "done");
+  const done = tagFiltered.filter((t) => t.status === "done");
   const total = tasks.length;
   const pct = total > 0 ? Math.round((done.length / total) * 100) : 0;
 
@@ -223,9 +226,12 @@ export default function Today() {
             {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
           </p>
         </div>
-        <button onClick={() => window.print()} className="no-print text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
-          Print agenda
-        </button>
+        <div className="flex items-center gap-3">
+          <TagFilterDropdown value={tagFilter} onChange={setTagFilter} />
+          <button onClick={() => window.print()} className="no-print text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
+            Print agenda
+          </button>
+        </div>
       </div>
 
       <div className="xl:grid xl:grid-cols-[1fr_320px] xl:gap-6 xl:items-start xl:content-start">

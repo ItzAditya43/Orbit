@@ -8,7 +8,8 @@ function hydrate(goal: any) {
   if (!goal) return goal;
   const milestones = db.prepare("SELECT * FROM goal_milestones WHERE goal_id = ? ORDER BY order_index ASC").all(goal.id);
   const habits = db.prepare("SELECT id, title, frequency FROM habits WHERE goal_id = ? AND archived = 0").all(goal.id);
-  return { ...goal, milestones, habits };
+  const tags = db.prepare(`SELECT t.* FROM tags t JOIN goal_tags gt ON gt.tag_id = t.id WHERE gt.goal_id = ?`).all(goal.id);
+  return { ...goal, milestones, habits, tags };
 }
 
 goalsRouter.get("/", (_req, res) => {

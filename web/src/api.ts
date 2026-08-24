@@ -206,9 +206,11 @@ export const api = {
       req<any>(`/analytics/summary${params?.from ? `?from=${params.from}&to=${params.to}` : ""}`),
   },
   boundaries: {
-    list: () => req<any[]>(`/boundaries`),
-    create: (body: { category: string; name: string }) =>
+    list: (includeInactive?: boolean) => req<any[]>(`/boundaries${includeInactive ? "?includeInactive=true" : ""}`),
+    create: (body: { category: string; name: string; projectId?: string }) =>
       req<any>(`/boundaries`, { method: "POST", body: JSON.stringify(body) }),
+    update: (id: string, body: { name?: string; category?: string; isActive?: boolean; projectId?: string | null }) =>
+      req<any>(`/boundaries/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     remove: (id: string) => req<void>(`/boundaries/${id}`, { method: "DELETE" }),
     check: (label: string) => req<any>(`/boundaries/check`, { method: "POST", body: JSON.stringify({ label }) }),
   },
@@ -218,6 +220,7 @@ export const api = {
       req<any>(`/scope-review`, { method: "POST", body: JSON.stringify(body) }),
     update: (id: string, body: { status?: string; reason?: string }) =>
       req<any>(`/scope-review/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    remove: (id: string) => req<void>(`/scope-review/${id}`, { method: "DELETE" }),
   },
   goals: {
     list: () => req<any[]>(`/goals`),
@@ -351,7 +354,8 @@ export interface Attachment {
 export type BoardElement =
   | { id: string; type: "text"; x: number; y: number; w: number; h: number; text: string; color?: string }
   | { id: string; type: "image"; x: number; y: number; w: number; h: number; attachmentId: string }
-  | { id: string; type: "sketch"; x: number; y: number; w: number; h: number; points: number[][]; color: string; strokeWidth: number };
+  | { id: string; type: "sketch"; x: number; y: number; w: number; h: number; points: number[][]; color: string; strokeWidth: number }
+  | { id: string; type: "task"; x: number; y: number; w: number; h: number; taskId: string };
 
 export interface Board {
   id: string;

@@ -123,6 +123,7 @@ habitsRouter.get("/", (req, res) => {
       const minutesLeft = (deadline.getTime() - now.getTime()) / 60000;
       deadlineStatus = minutesLeft < 0 ? "missed" : minutesLeft <= 120 ? "due-soon" : "ok";
     }
+    const tags = db.prepare(`SELECT t.* FROM tags t JOIN habit_tags ht ON ht.tag_id = t.id WHERE ht.habit_id = ?`).all(h.id);
     return {
       ...h,
       customDays,
@@ -135,6 +136,7 @@ habitsRouter.get("/", (req, res) => {
       loggedToday: !!todayLog,
       deadlineStatus,
       periodProgress,
+      tags,
     };
   });
   res.json(withLogs);

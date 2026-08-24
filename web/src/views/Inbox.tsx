@@ -1,19 +1,23 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { api, type Task } from "../api";
 import { TaskRow } from "../components/TaskRow";
 import { QuickAdd } from "../components/QuickAdd";
 import { EmptyState } from "../components/EmptyState";
 import { InboxIcon } from "../icons";
 import { useToastStore } from "../toastStore";
+import { TagFilterDropdown, matchesTag } from "../components/TagFilterDropdown";
 
 export default function Inbox() {
   const qc = useQueryClient();
   const toast = useToastStore((s) => s.push);
-  const { data: tasks = [], isLoading } = useQuery({
+  const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ["tasks", "inbox"],
     queryFn: () => api.tasks.list({ view: "inbox" }),
   });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projects.list });
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const tasks = allTasks.filter((t) => matchesTag(t, tagFilter));
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tasks"] });
 
@@ -40,7 +44,10 @@ export default function Inbox() {
 
   return (
     <div className="max-w-2xl xl:max-w-3xl 2xl:max-w-4xl mx-auto p-8 space-y-6">
-      <h1 className="text-xl font-semibold">Inbox</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Inbox</h1>
+        <TagFilterDropdown value={tagFilter} onChange={setTagFilter} />
+      </div>
       <p className="text-sm text-neutral-400">Capture first, organize later.</p>
       <QuickAdd onAdd={onAdd} placeholder="Capture an idea or task..." />
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
@@ -68,7 +75,10 @@ export default function Inbox() {
             )}
           </div>
         ))}
-        {tasks.length === 0 && !isLoading && (
+        {tasks.length === 0 && !isLoading && allTasks.length > 0 && (
+          <p className="text-sm text-neutral-400">No inbox tasks with that tag.</p>
+        )}
+        {allTasks.length === 0 && !isLoading && (
           <EmptyState icon={InboxIcon} title="Inbox zero" subtitle="Anything you capture without a date lands here — sort it into a project when you're ready." />
         )}
       </div>

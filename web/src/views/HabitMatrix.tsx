@@ -79,10 +79,15 @@ export default function HabitMatrix() {
                     key={h.id}
                     draggable
                     onDragStart={(e) => e.dataTransfer.setData("text/habit-id", h.id)}
-                    className="text-sm px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 cursor-grab active:cursor-grabbing truncate"
+                    className="text-sm px-2.5 py-1.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 cursor-grab active:cursor-grabbing flex items-center gap-1.5 min-w-0"
                     title={h.title}
                   >
-                    {h.title}
+                    <span className="truncate">{h.title}</span>
+                    {(h.tags ?? []).map((tag: any) => (
+                      <span key={tag.id} className="text-[9px] px-1 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-500 shrink-0">
+                        {tag.name}
+                      </span>
+                    ))}
                   </div>
                 ))}
                 {items.length === 0 && <p className="text-xs text-neutral-300 dark:text-neutral-700">Empty</p>}

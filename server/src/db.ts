@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS boundaries (
   category TEXT NOT NULL, -- main | hobby | game | restricted
   name TEXT NOT NULL,
   is_active INTEGER NOT NULL DEFAULT 1,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL
 );
 
@@ -297,6 +298,11 @@ if (!notesColumnNames.has("deleted_at")) db.exec("ALTER TABLE notes ADD COLUMN d
 const projectColumns = db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
 const projectColumnNames = new Set(projectColumns.map((c) => c.name));
 if (!projectColumnNames.has("deleted_at")) db.exec("ALTER TABLE projects ADD COLUMN deleted_at TEXT");
+
+const boundaryColumns = db.prepare("PRAGMA table_info(boundaries)").all() as { name: string }[];
+if (!boundaryColumns.some((c) => c.name === "project_id")) {
+  db.exec("ALTER TABLE boundaries ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL");
+}
 
 // Time-boxed + quantity-based habits (e.g. "drink water by midnight", "read 20 pages"),
 // on top of the original plain daily-checkbox habit.
