@@ -19,9 +19,7 @@ analyticsRouter.get("/summary", (req, res) => {
   const totalDone = (db.prepare(`SELECT COUNT(*) c FROM tasks WHERE ${doneClauses.join(" AND ")}`).get(...doneParams) as any).c;
   const overdue = (
     db
-      .prepare(
-        "SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < date('now') AND (recurrence IS NULL OR recurrence NOT IN ('daily','weekly','interval','custom_days'))"
-      )
+      .prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < date('now')")
       .get() as any
   ).c;
   const estimateVsActual = db

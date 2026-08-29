@@ -57,6 +57,10 @@ tasksRouter.get("/", (req, res) => {
     clauses.push("is_inbox = 1", "status = 'open'");
   } else if (view === "today") {
     const today = new Date().toISOString().slice(0, 10);
+    // A recurring task made via "Starts" (no due_date set) is genuinely due today by its
+    // recurrence pattern even though due_date/scheduled_at/start_date are all null — matched
+    // separately below via the same per-day expansion Calendar.tsx uses, since that can't be
+    // expressed as a single SQL comparison the way a plain due_date can.
     clauses.push("status = 'open'", "(due_date <= ? OR scheduled_at LIKE ? OR start_date <= ?)");
     params.push(today, `${today}%`, today);
   } else if (view === "upcoming") {
@@ -89,7 +93,41 @@ tasksRouter.get("/", (req, res) => {
   clauses.push("parent_id IS NULL");
 
   const where = `WHERE ${clauses.join(" AND ")}`;
-  const rows = db.prepare(`SELECT * FROM tasks ${where} ORDER BY order_index ASC, created_at ASC`).all(...params);
+  const rows = db.prepare(`SELECT * FROM tasks ${where} ORDER BY order_index ASC, created_at ASC`).all(...params) as any[];
+
+  if (view === "today") {
+    const today = new Date().toISOString().slice(0, 10);
+    const seenIds = new Set(rows.map((r) => r.id));
+    const recurringCandidates = db
+      .prepare(
+        `SELECT * FROM tasks
+         WHERE deleted_at IS NULL AND status = 'open' AND parent_id IS NULL
+           AND recurrence IN ('daily','weekly','interval','custom_days')
+           AND (recurrence_start_date IS NOT NULL OR due_date IS NOT NULL)
+           AND (recurrence_end_date IS NULL OR recurrence_end_date >= ?)`
+      )
+      .all(today) as any[];
+    for (const t of recurringCandidates) {
+      if (seenIds.has(t.id)) continue;
+      const anchorIso = (t.recurrence_start_date ?? t.due_date).slice(0, 10);
+      if (anchorIso > today) continue;
+      const customDays: number[] | null = t.recurrence_days ? JSON.parse(t.recurrence_days) : null;
+      const dayOfWeek = new Date(`${today}T00:00:00Z`).getUTCDay();
+      const due =
+        t.recurrence === "custom_days"
+          ? customDays?.includes(dayOfWeek)
+          : t.recurrence === "interval" && t.recurrence_interval_days
+            ? Math.round((new Date(`${today}T00:00:00Z`).getTime() - new Date(`${anchorIso}T00:00:00Z`).getTime()) / 86400000) % t.recurrence_interval_days === 0
+            : t.recurrence === "weekly"
+              ? Math.round((new Date(`${today}T00:00:00Z`).getTime() - new Date(`${anchorIso}T00:00:00Z`).getTime()) / 86400000) % 7 === 0
+              : true; // daily
+      if (due) {
+        rows.push(t);
+        seenIds.add(t.id);
+      }
+    }
+  }
+
   res.json(rows.map(hydrate));
 });
 
@@ -259,18 +297,31 @@ tasksRouter.patch("/:id", (req, res) => {
   // is_inbox untouched left it stuck showing in the Unscheduled panel forever even though it's
   // no longer unscheduled. Only auto-clear it if the caller didn't already say what isInbox
   // should be in this same request.
+  const nextRecurrence = "recurrence" in req.body ? req.body.recurrence : (existing as any).recurrence;
+  const nextStartDate = "recurrenceStartDate" in req.body ? req.body.recurrenceStartDate : (existing as any).recurrence_start_date;
+  const isRecurringNow = nextRecurrence && ["daily", "weekly", "interval", "custom_days"].includes(nextRecurrence);
+
   if (!("isInbox" in req.body)) {
-    const nextRecurrence = "recurrence" in req.body ? req.body.recurrence : (existing as any).recurrence;
     const nextDueDate = "dueDate" in req.body ? req.body.dueDate : (existing as any).due_date;
-    const nextStartDate = "recurrenceStartDate" in req.body ? req.body.recurrenceStartDate : (existing as any).recurrence_start_date;
-    if (
-      nextRecurrence &&
-      nextRecurrence !== "none" &&
-      ["daily", "weekly", "interval", "custom_days"].includes(nextRecurrence) &&
-      (nextDueDate || nextStartDate)
-    ) {
+    // A task that just gained a per-day recurrence plus a real anchor date is now genuinely
+    // scheduled on the Calendar going forward — leaving is_inbox untouched left it stuck showing
+    // in the Unscheduled panel forever even though it's no longer unscheduled. Only auto-clear
+    // it if the caller didn't already say what isInbox should be in this same request.
+    if (isRecurringNow && (nextDueDate || nextStartDate)) {
       updates.push("is_inbox = ?");
       values.push(0);
+    }
+  }
+  // Setting/moving "Starts" on a recurring task with no due_date (or one that predates the new
+  // Starts) syncs due_date to match, so a freshly-configured recurring task doesn't start out
+  // already "Overdue" from a stale pre-recurrence due_date — a real bug that made "how is it
+  // overdue if it's due today" happen on setup. Only touches due_date when the caller isn't
+  // already setting it explicitly in this same request.
+  if (isRecurringNow && "recurrenceStartDate" in req.body && !("dueDate" in req.body)) {
+    const existingDue = (existing as any).due_date;
+    if (!existingDue || existingDue < req.body.recurrenceStartDate) {
+      updates.push("due_date = ?");
+      values.push(req.body.recurrenceStartDate);
     }
   }
   if (updates.length) {

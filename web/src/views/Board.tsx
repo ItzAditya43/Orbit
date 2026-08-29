@@ -22,11 +22,12 @@ export default function BoardDashboard() {
     queryKey: ["analytics", "board-snapshot"],
     queryFn: () => api.analytics.summary({ from: localISODate(new Date(Date.now() - 13 * 86400000)), to: today }),
   });
-  // Recurring tasks (daily/weekly/interval/custom-days) carry a fixed anchor due_date that can
-  // sit in the past forever even though they recur — comparing that raw column against "today"
-  // wrongly called a recurring task "overdue" every single day. The Calendar API already does
-  // the correct recurrence expansion (same logic used to render the Calendar view itself), so
-  // pull "is this task actually due today/tomorrow" from there instead of due_date directly.
+  // A task's stored due_date only advances when you complete it, so "due today/tomorrow" for a
+  // recurring task (e.g. created via "Starts" with no due_date at all) can't be read off that
+  // column directly — the Calendar API already does the correct recurrence expansion (same
+  // logic used to render the Calendar view itself), so pull "due today/tomorrow" from there.
+  // Overdue stays a plain due_date comparison — a stale due_date on an open recurring task
+  // genuinely means it hasn't been completed since then, which is real overdue signal, not noise.
   const { data: calendarEntries = [] } = useQuery({
     queryKey: ["calendar", "board-dashboard", today, tomorrow],
     queryFn: () => api.calendar.list({ from: today, to: tomorrow }),
@@ -35,17 +36,14 @@ export default function BoardDashboard() {
     new Set(calendarEntries.filter((e: any) => e.source === "task" && (e.starts_at ?? "").slice(0, 10) === day).map((e: any) => e.task_id));
   const dueTodayIds = taskIdsDueOn(today);
   const dueTomorrowIds = taskIdsDueOn(tomorrow);
-  const RECURRING_TYPES = ["daily", "weekly", "interval", "custom_days"];
 
-  const dueToday = tasks.filter((t) => dueTodayIds.has(t.id));
-  const dueTomorrow = tasks.filter((t) => dueTomorrowIds.has(t.id));
-  const overdue = tasks.filter(
-    (t) => t.due_date && t.due_date < today && !dueTodayIds.has(t.id) && !(t.recurrence && RECURRING_TYPES.includes(t.recurrence))
-  );
+  const overdue = tasks.filter((t) => t.due_date && t.due_date < today);
+  const dueToday = tasks.filter((t) => dueTodayIds.has(t.id) || t.due_date === today);
+  const dueTomorrow = tasks.filter((t) => dueTomorrowIds.has(t.id) || t.due_date === tomorrow);
   const recentNotes = [...notes].sort((a: any, b: any) => (b.updated_at ?? "").localeCompare(a.updated_at ?? "")).slice(0, 5);
   const habitsDue = habits.filter((h: any) => h.dueToday !== false && !h.doneToday);
 
-  const isTaskUrgent = (t: any) => dueTodayIds.has(t.id) || (!!t.due_date && t.due_date < today && !(t.recurrence && RECURRING_TYPES.includes(t.recurrence)));
+  const isTaskUrgent = (t: any) => dueTodayIds.has(t.id) || (!!t.due_date && t.due_date <= today);
   const isTaskImportant = (t: any) => t.priority === "high" || t.priority === "urgent";
   const quadrantCounts: Record<string, number> = { do: 0, schedule: 0, delegate: 0, later: 0 };
   for (const t of tasks) {

@@ -70,9 +70,10 @@ notificationsRouter.post("/check-due", (_req, res) => {
   for (const t of dueTasks) {
     const isOverdue = t.due_date < today;
     const message = `${isOverdue ? "Overdue" : "Due today"}: ${t.title}`;
-    const already = db
-      .prepare("SELECT id FROM notifications WHERE source = 'due-task' AND message = ? AND substr(created_at,1,10) = ?")
-      .get(message, today);
+    // Dedupe on "still unread" rather than "same calendar day" — a task that's been overdue for
+    // a week shouldn't get a fresh notification every single day it stays overdue, piling up
+    // into a wall of near-identical entries. Once you read/dismiss it, a new one can fire again.
+    const already = db.prepare("SELECT id FROM notifications WHERE source = 'due-task' AND message = ? AND is_read = 0").get(message);
     if (already) continue;
     const id = randomUUID();
     db.prepare("INSERT INTO notifications (id, message, source, created_at) VALUES (?,?,?,?)").run(id, message, "due-task", new Date().toISOString());

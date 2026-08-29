@@ -6,13 +6,7 @@ import { api, type Task } from "../api";
 // for goals), not a separate flag — dragging an item into a quadrant writes back the field
 // combination that quadrant represents, so the matrix stays a live view of the same data
 // everywhere else in the app, not a parallel system that can drift out of sync.
-const RECURRING_TYPES = ["daily", "weekly", "interval", "custom_days"];
 function isTaskUrgent(t: Task) {
-  // A recurring task's due_date is a fixed anchor that never advances until it's completed, so
-  // comparing it against "today" made every open recurring task look permanently overdue/urgent
-  // regardless of the actual day. Treat it as always current instead — it recurs, so it's
-  // always "now" in some sense — rather than reading a stale, meaningless date comparison.
-  if (t.recurrence && RECURRING_TYPES.includes(t.recurrence)) return true;
   if (!t.due_date) return false;
   const today = new Date().toISOString().slice(0, 10);
   return t.due_date <= today;
