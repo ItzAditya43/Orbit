@@ -10,6 +10,27 @@ export default function Review() {
   const { data: weekly, isLoading: loadingWeekly } = useQuery({ queryKey: ["review", "weekly"], queryFn: api.review.weekly, enabled: tab === "weekly" });
   const { data: reviewItems = [] } = useQuery({ queryKey: ["scope-review"], queryFn: api.scopeReview.list, enabled: tab === "weekly" });
   const pendingIdeas = reviewItems.filter((r: any) => r.status === "pending" || r.status === "parked").length;
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [summarizing, setSummarizing] = useState(false);
+
+  const generateSummary = async () => {
+    const data = tab === "daily" ? daily : weekly;
+    if (!data) return;
+    setSummarizing(true);
+    setAiSummary(null);
+    try {
+      const { text } = await api.ai.generate(
+        `Here's my ${tab} review data as JSON:\n${JSON.stringify(data).slice(0, 4000)}`,
+        `Write a short (3-5 sentence), encouraging but honest ${tab} recap for a productivity app user, based only ` +
+          "on the JSON given. Mention what went well and what's slipping, in plain prose, no markdown, no lists."
+      );
+      setAiSummary(text);
+    } catch {
+      setAiSummary("Couldn't reach AI — check it's configured in Settings.");
+    } finally {
+      setSummarizing(false);
+    }
+  };
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["review"] });
@@ -42,6 +63,21 @@ export default function Review() {
             {t}
           </button>
         ))}
+      </div>
+
+      <div className="space-y-2">
+        <button
+          onClick={generateSummary}
+          disabled={summarizing || (tab === "daily" ? !daily : !weekly)}
+          className="text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800"
+        >
+          {summarizing ? "Thinking..." : "✨ AI summary"}
+        </button>
+        {aiSummary && (
+          <p className="text-sm rounded-xl border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30 p-4 text-violet-800 dark:text-violet-300">
+            {aiSummary}
+          </p>
+        )}
       </div>
 
       {tab === "daily" && (

@@ -66,6 +66,84 @@ function DevicesSection() {
   );
 }
 
+function AiProviderSection({ local, save }: { local: any; save: (patch: Record<string, unknown>) => void }) {
+  const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState<{ ok: boolean; model?: string } | null>(null);
+  const provider = local.aiProvider ?? "local";
+
+  const check = async () => {
+    setChecking(true);
+    setStatus(null);
+    try {
+      const s = await api.ai.status();
+      setStatus({ ok: s.ollamaAvailable, model: s.ollamaModel });
+    } catch {
+      setStatus({ ok: false });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-sm font-medium">AI model</h2>
+        <p className="text-xs text-neutral-400 mt-0.5">
+          Powers the chat command bar (⌘J), subtask suggestions, and AI review summaries. Both options are Ollama —
+          local runs a model on this machine, cloud uses ollama.com's free hosted tier (sign up, no credit card,
+          create an API key).
+        </p>
+      </div>
+      <div className="flex gap-2">
+        {(["local", "cloud"] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => save({ aiProvider: p })}
+            className={`flex-1 text-sm px-3 py-2 rounded-lg border ${
+              provider === p ? "border-neutral-900 dark:border-white bg-neutral-50 dark:bg-neutral-900" : "border-neutral-200 dark:border-neutral-800"
+            }`}
+          >
+            {p === "local" ? "Local Ollama" : "Ollama Cloud (free)"}
+          </button>
+        ))}
+      </div>
+      {provider === "cloud" && (
+        <div className="space-y-2 rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
+          <label className="block text-xs text-neutral-400">
+            API key (from ollama.com → Settings → Keys)
+            <input
+              type="password"
+              value={local.ollamaCloudApiKey ?? ""}
+              onChange={(e) => save({ ollamaCloudApiKey: e.target.value })}
+              placeholder="Paste your Ollama Cloud API key"
+              className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-sm"
+            />
+          </label>
+        </div>
+      )}
+      <label className="block text-xs text-neutral-400">
+        Model name{provider === "cloud" ? " (see ollama.com/search, filter by \"cloud\")" : ""}
+        <input
+          value={local.ollamaModel ?? ""}
+          onChange={(e) => save({ ollamaModel: e.target.value })}
+          placeholder={provider === "cloud" ? "gpt-oss:20b-cloud" : "llama3.2:1b"}
+          className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-sm"
+        />
+      </label>
+      <div className="flex items-center gap-3">
+        <button onClick={check} disabled={checking} className="text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
+          {checking ? "Checking..." : "Test connection"}
+        </button>
+        {status && (
+          <span className={`text-xs ${status.ok ? "text-emerald-500" : "text-red-500"}`}>
+            {status.ok ? `Connected — using ${status.model}` : "Couldn't reach it — check the key/model/that Ollama is running"}
+          </span>
+        )}
+      </div>
+    </section>
+  );
+}
+
 const PERMISSION_MODES = [
   { value: "suggest", label: "Suggest", desc: "Every AI action needs your approval before it runs." },
   { value: "assist", label: "Assist", desc: "AI acts immediately on everyday actions (default)." },
@@ -156,6 +234,48 @@ export default function Settings() {
       </section>
 
       <section className="space-y-3">
+        <h2 className="text-sm font-medium">Periodic reminders</h2>
+        <p className="text-xs text-neutral-400 -mt-1">
+          A recurring nudge to check your Board/to-dos, sent as a real desktop notification (not just the bell here) —
+          fires on this interval while the app is running, on top of anything else you get notified about.
+        </p>
+        <label className="flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 cursor-pointer">
+          <span className="text-sm">Enable periodic reminder</span>
+          <input
+            type="checkbox"
+            checked={!!local.periodicReminderEnabled}
+            onChange={(e) => save({ periodicReminderEnabled: e.target.checked })}
+          />
+        </label>
+        {local.periodicReminderEnabled && (
+          <div className="space-y-2 rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
+            <label className="flex items-center justify-between">
+              <span className="text-sm">Every</span>
+              <span className="flex items-center gap-2 text-sm">
+                <input
+                  type="number"
+                  min={1}
+                  value={local.periodicReminderIntervalMinutes}
+                  onChange={(e) => save({ periodicReminderIntervalMinutes: Math.max(1, Number(e.target.value) || 1) })}
+                  className="w-20 rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1"
+                />
+                minutes
+              </span>
+            </label>
+            <label className="block text-xs text-neutral-400">
+              Message
+              <input
+                value={local.periodicReminderMessage ?? ""}
+                onChange={(e) => save({ periodicReminderMessage: e.target.value })}
+                placeholder="Check your Board and to-dos"
+                className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-sm"
+              />
+            </label>
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
         <h2 className="text-sm font-medium">AI operator permission mode</h2>
         <div className="space-y-2">
           {PERMISSION_MODES.map((m) => (
@@ -180,6 +300,8 @@ export default function Settings() {
           ))}
         </div>
       </section>
+
+      <AiProviderSection local={local} save={save} />
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium">Task templates</h2>

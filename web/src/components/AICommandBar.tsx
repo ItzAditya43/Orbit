@@ -60,7 +60,8 @@ export function AICommandBar() {
     setText("");
     setBusy(true);
     try {
-      const res = await api.ai.command(userText);
+      const history = log.map((m) => ({ role: m.role, content: m.text }));
+      const res = await api.ai.command(userText, history);
       setLog((l) => [...l, { role: "assistant", text: res.message ?? JSON.stringify(res.result) }]);
       invalidateAfterAction();
     } catch {

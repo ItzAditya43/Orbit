@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./db.js";
+import { handleAiText } from "./routes/ai.js";
 
 interface TriggerContext {
   taskId?: string;
@@ -73,9 +74,20 @@ async function runAction(actionType: string, config: any, ctx: TriggerContext) {
     );
   } else if (actionType === "start_timer" && ctx.taskId) {
     db.prepare("INSERT INTO time_entries (id, task_id, started_at) VALUES (?,?,?)").run(randomUUID(), ctx.taskId, now);
+  } else if (actionType === "run_ai_workflow") {
+    // Runs the same deterministic-first/AI-fallback pipeline the chat command bar uses — an
+    // automation is just a scheduled/triggered version of typing a command. Any tool call it
+    // decides on still lands in ai_actions for approval like every other AI-issued action; this
+    // just leaves a notification either way so a silent automation doesn't go unnoticed.
+    const prompt = interpolate(config.prompt ?? "Give me a one-sentence status check on my day.", ctx);
+    const outcome = await handleAiText(prompt);
+    db.prepare("INSERT INTO notifications (id, message, source, created_at) VALUES (?,?,?,?)").run(
+      randomUUID(),
+      `AI workflow: ${outcome?.message ?? "no response"}`,
+      "automation",
+      now
+    );
   }
-  // run_ai_workflow intentionally left as a stub — see server/src/routes/ai.ts for the
-  // deterministic-fallback AI gateway this would delegate to.
 }
 
 function interpolate(template: string, ctx: TriggerContext) {

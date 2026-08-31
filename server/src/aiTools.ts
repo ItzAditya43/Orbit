@@ -104,6 +104,29 @@ export const tools = {
     );
     return db.prepare("SELECT * FROM tasks WHERE id = ?").get(args.taskId);
   },
+  get_habits() {
+    return db.prepare("SELECT id, title, frequency, target_count, unit, deadline_time FROM habits WHERE archived = 0").all();
+  },
+  get_goals() {
+    return db.prepare("SELECT id, title, horizon, status, progress, target_date FROM goals WHERE status != 'abandoned'").all();
+  },
+  get_projects() {
+    return db
+      .prepare("SELECT id, name, color, is_archived FROM projects WHERE is_archived = 0 AND deleted_at IS NULL")
+      .all();
+  },
+  get_analytics_summary() {
+    const today = new Date().toISOString().slice(0, 10);
+    const totalOpen = (db.prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open'").get() as any).c;
+    const overdue = (
+      db
+        .prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < ?")
+        .get(today) as any
+    ).c;
+    const habitsTotal = (db.prepare("SELECT COUNT(*) c FROM habits WHERE archived = 0").get() as any).c;
+    const goalsActive = (db.prepare("SELECT COUNT(*) c FROM goals WHERE status = 'active'").get() as any).c;
+    return { totalOpen, overdue, habitsTotal, goalsActive };
+  },
   search_notes(args: { query: string }) {
     return db
       .prepare(`SELECT notes.* FROM notes_fts JOIN notes ON notes.rowid = notes_fts.rowid WHERE notes_fts MATCH ? ORDER BY rank`)
@@ -197,7 +220,16 @@ export const TOOL_NAMES = Object.keys(tools) as ToolName[];
 
 // Read-only tools never need approval regardless of AI permission mode. Everything else
 // mutates state, so it's gated by the "suggest" permission mode (see routes/ai.ts).
-export const READ_ONLY_TOOLS = new Set<ToolName>(["get_today", "get_tasks", "get_available_time", "search_notes"]);
+export const READ_ONLY_TOOLS = new Set<ToolName>([
+  "get_today",
+  "get_tasks",
+  "get_available_time",
+  "search_notes",
+  "get_habits",
+  "get_goals",
+  "get_projects",
+  "get_analytics_summary",
+]);
 
 export function runTool(name: string, args: any) {
   const fn = (tools as any)[name];

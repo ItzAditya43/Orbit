@@ -30,6 +30,8 @@ export function TaskDetailDrawer() {
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [subtaskTitle, setSubtaskTitle] = useState("");
+  const [suggestedSubtasks, setSuggestedSubtasks] = useState<string[] | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -47,6 +49,33 @@ export function TaskDetailDrawer() {
 
   const patch = async (body: Record<string, unknown>) => {
     await api.tasks.update(openTaskId, body);
+    invalidate();
+  };
+
+  const suggestSubtasks = async () => {
+    if (!task) return;
+    setSuggesting(true);
+    setSuggestedSubtasks(null);
+    try {
+      const { text } = await api.ai.generate(
+        `Break this task into 3-6 concrete subtasks: "${task.title}"${task.notes ? `\nContext: ${task.notes}` : ""}`,
+        "Reply with ONLY a numbered or bulleted list of short subtask titles, one per line. No intro, no explanation, no markdown formatting beyond the list markers."
+      );
+      const lines = text
+        .split("\n")
+        .map((l) => l.replace(/^[\s\-*\d.)]+/, "").trim())
+        .filter(Boolean);
+      setSuggestedSubtasks(lines.slice(0, 8));
+    } catch {
+      setSuggestedSubtasks([]);
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  const addSuggestedSubtask = async (subtaskText: string) => {
+    await api.tasks.create({ title: subtaskText, parentId: openTaskId });
+    setSuggestedSubtasks((s) => (s ? s.filter((t) => t !== subtaskText) : s));
     invalidate();
   };
 
@@ -253,7 +282,30 @@ export function TaskDetailDrawer() {
                 <p className="text-xs font-medium text-neutral-500">
                   Subtasks {subtasks.length > 0 && `(${doneCount}/${subtasks.length})`}
                 </p>
+                <button onClick={suggestSubtasks} disabled={suggesting} className="text-[11px] text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
+                  {suggesting ? "Thinking..." : "✨ Suggest subtasks"}
+                </button>
               </div>
+              {suggestedSubtasks && (
+                <div className="space-y-1 rounded-lg border border-dashed border-neutral-200 dark:border-neutral-800 p-2">
+                  {suggestedSubtasks.length === 0 && (
+                    <p className="text-[11px] text-neutral-400">Couldn't reach AI — check it's configured in Settings.</p>
+                  )}
+                  {suggestedSubtasks.map((s) => (
+                    <div key={s} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="flex-1">{s}</span>
+                      <button onClick={() => addSuggestedSubtask(s)} className="text-neutral-400 hover:text-emerald-500 shrink-0">
+                        + add
+                      </button>
+                    </div>
+                  ))}
+                  {suggestedSubtasks.length > 0 && (
+                    <button onClick={() => setSuggestedSubtasks(null)} className="text-[11px] text-neutral-400 hover:underline">
+                      dismiss
+                    </button>
+                  )}
+                </div>
+              )}
               {subtasks.length > 0 && (
                 <div className="h-1 w-full rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
                   <div

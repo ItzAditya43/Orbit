@@ -289,10 +289,13 @@ export const api = {
     markRead: (id: string) => req<any>(`/notifications/${id}/read`, { method: "POST" }),
     markAllRead: () => req<any>(`/notifications/read-all`, { method: "POST" }),
     checkDue: () => req<{ created: number }>(`/notifications/check-due`, { method: "POST" }),
+    checkPeriodicReminder: () => req<{ created: number }>(`/notifications/check-periodic-reminder`, { method: "POST" }),
   },
   ai: {
     status: () => req<any>(`/ai/status`),
-    command: (text: string) => req<any>(`/ai/command`, { method: "POST", body: JSON.stringify({ text }) }),
+    command: (text: string, history?: { role: "user" | "assistant"; content: string }[]) =>
+      req<any>(`/ai/command`, { method: "POST", body: JSON.stringify({ text, history }) }),
+    generate: (prompt: string, system?: string) => req<{ text: string }>(`/ai/generate`, { method: "POST", body: JSON.stringify({ prompt, system }) }),
     pendingActions: () => req<any[]>(`/ai/actions?status=pending`),
     approveAction: (id: string) => req<any>(`/ai/actions/${id}/approve`, { method: "POST" }),
     rejectAction: (id: string) => req<any>(`/ai/actions/${id}/reject`, { method: "POST" }),

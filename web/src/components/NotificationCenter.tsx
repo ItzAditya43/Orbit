@@ -53,6 +53,22 @@ export function NotificationCenter() {
     return () => clearInterval(interval);
   }, [settings, qc]);
 
+  // Periodic "check your Board/to-dos" nudge (Settings → Periodic reminders). Polled every 60s
+  // so a short user-configured interval (e.g. every few minutes) still fires reasonably close to
+  // on time, but the actual interval is enforced server-side against the last reminder's
+  // timestamp (see check-periodic-reminder) — this poll cadence is just how often we ask "is it
+  // time yet", not the interval itself, so it can't double-fire or drift from polling alone.
+  useEffect(() => {
+    if (!settings || !settings.periodicReminderEnabled) return;
+    const check = () =>
+      api.notifications.checkPeriodicReminder().then((r) => {
+        if (r.created > 0) qc.invalidateQueries({ queryKey: ["notifications"] });
+      });
+    check();
+    const interval = setInterval(check, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [settings, qc]);
+
   // The in-app bell only surfaces a notification if you happen to open the dropdown — nothing
   // reaches you while the window is unfocused or minimized. Mirror any new unread notification
   // out to a real OS/desktop notification (Tauri desktop shell only; no-op on plain web).

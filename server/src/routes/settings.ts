@@ -8,7 +8,13 @@ const DEFAULTS: Record<string, unknown> = {
   workingHoursStart: "09:00",
   workingHoursEnd: "17:00",
   aiPermissionMode: "assist", // suggest | assist | autopilot
+  aiProvider: "local", // local (Ollama on this machine) | cloud (Ollama Cloud, free tier)
+  ollamaModel: "", // empty = provider-specific default in routes/ai.ts
+  ollamaCloudApiKey: "",
   notifyDueTasks: true,
+  periodicReminderEnabled: false,
+  periodicReminderIntervalMinutes: 60,
+  periodicReminderMessage: "Check your Board and to-dos",
   pomodoroLongBreakEvery: 4,
 };
 

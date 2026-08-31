@@ -81,3 +81,38 @@ notificationsRouter.post("/check-due", (_req, res) => {
   }
   res.json({ created: created.length });
 });
+
+function getSetting<T>(key: string, fallback: T): T {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as any;
+  if (!row) return fallback;
+  try {
+    return JSON.parse(row.value);
+  } catch {
+    return fallback;
+  }
+}
+
+// A recurring nudge ("check your Board/to-dos") independent of any specific task being due.
+// The interval is enforced HERE, server-side, against the last periodic-reminder notification's
+// timestamp — not by the client's poll cadence — so it stays correct no matter how often (or
+// rarely, or from how many open windows) the client happens to call this, and can never double-
+// fire from a client-side timer bug the way an earlier notification-spam issue did.
+notificationsRouter.post("/check-periodic-reminder", (_req, res) => {
+  const enabled = getSetting("periodicReminderEnabled", false);
+  if (!enabled) return res.json({ created: 0 });
+
+  const intervalMinutes = Math.max(1, Number(getSetting("periodicReminderIntervalMinutes", 60)));
+  const message = String(getSetting("periodicReminderMessage", "Check your Board and to-dos") || "Check your Board and to-dos");
+
+  const last = db.prepare("SELECT created_at FROM notifications WHERE source = 'periodic-reminder' ORDER BY created_at DESC LIMIT 1").get() as
+    | { created_at: string }
+    | undefined;
+  const now = Date.now();
+  if (last && now - new Date(last.created_at).getTime() < intervalMinutes * 60000) {
+    return res.json({ created: 0 });
+  }
+
+  const id = randomUUID();
+  db.prepare("INSERT INTO notifications (id, message, source, created_at) VALUES (?,?,?,?)").run(id, message, "periodic-reminder", new Date().toISOString());
+  res.json({ created: 1 });
+});

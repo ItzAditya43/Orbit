@@ -3,7 +3,7 @@ import { useState } from "react";
 import { api } from "../api";
 
 const TRIGGERS = ["task_completed", "task_overdue", "focus_ended"];
-const ACTIONS = ["create_task", "notify", "webhook", "reschedule", "start_timer"];
+const ACTIONS = ["create_task", "notify", "webhook", "reschedule", "start_timer", "run_ai_workflow"];
 
 export default function Automations() {
   const qc = useQueryClient();
@@ -28,7 +28,9 @@ export default function Automations() {
             ? { url: message }
             : actionType === "reschedule"
               ? { offsetDays: Number(message) || 1 }
-              : {};
+              : actionType === "run_ai_workflow"
+                ? { prompt: message }
+                : {};
     await api.automations.create({ name: name.trim(), triggerType, actionType, config });
     setName("");
     setMessage("");
@@ -79,7 +81,9 @@ export default function Automations() {
                   ? "New task title (use {taskTitle})"
                   : actionType === "reschedule"
                     ? "Push due date forward by N days (e.g. 1)"
-                    : "Notification message (use {taskTitle})"
+                    : actionType === "run_ai_workflow"
+                      ? "Prompt for the AI (use {taskTitle}) — result posts as a notification"
+                      : "Notification message (use {taskTitle})"
             }
             className="w-full rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
           />
