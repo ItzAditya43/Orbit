@@ -16,6 +16,13 @@ rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 cp -r "$SERVER_DIR/dist" "$OUT_DIR/dist"
 cp "$SERVER_DIR/package.json" "$OUT_DIR/package.json"
+# The built web UI rides along so the server can hand it to browsers on other devices
+# (Settings -> Other devices). beforeBuildCommand runs `npm run build` before this script.
+if [ -f "$SCRIPT_DIR/../dist/index.html" ]; then
+  cp -r "$SCRIPT_DIR/../dist" "$OUT_DIR/web"
+else
+  echo "[prepare-server-resource] warning: web/dist not built — remote access will have no UI to serve" >&2
+fi
 
 echo "[prepare-server-resource] installing production dependencies..."
 (cd "$OUT_DIR" && npm install --omit=dev --no-audit --no-fund)

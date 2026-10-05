@@ -18,7 +18,7 @@ npm install
 npm run dev
 ```
 
-- API: http://localhost:4310 — Express + better-sqlite3, DB at `~/.local/share/orbit/productivity.sqlite`
+- API: http://localhost:4310 (this machine only) — Express + better-sqlite3, DB at `~/.local/share/orbit/productivity.sqlite`
   (falls back to `server/data/` on first run if that's where an existing dev DB already lives —
   see `server/src/dataDir.ts`)
 - Web: http://localhost:5173 — React + Vite + Tailwind v4 + React Query + Zustand
@@ -187,6 +187,18 @@ Review.
 `Water plants every 3 days` — `#project`, `@tag` (quote multi-word names), `!low|medium|high|urgent`,
 a date phrase, and a repeat (`every day/week/month`, `every N days`, `every monday`,
 `every mon wed fri`, `every weekday`). Parsed locally; a preview shows what was understood.
+
+**Other devices (phone, another computer)**: Settings → Other devices gives a QR code / link
+that opens this same Orbit in any browser, from anywhere. Nothing is copied or synced — the
+other device uses the web UI served by this machine's server, on the one database, and windows
+open on different devices pick up each other's changes within a few seconds. How it's kept
+safe: the normal API listener is bound to loopback only; remote traffic goes to a second
+loopback listener (port 4311) that requires an access key on every request, and the only way
+in from outside is a Cloudflare quick tunnel (`cloudflared`, which you install yourself —
+Orbit never downloads it) pointed at that listener. The key arrives in the link, is swapped
+for an HttpOnly cookie on first visit, and can be reset from Settings to sign every device
+out. The tunnel address is random and changes whenever Orbit restarts, and the computer has to
+be on with Orbit running. See `server/src/remoteAccess.ts`.
 
 **Dates** follow the system timezone — "today" is the date on this machine's clock.
 

@@ -12,6 +12,7 @@ import { NotificationCenter } from "./components/NotificationCenter";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { GlobalErrorHandler } from "./components/GlobalErrorHandler";
 import { HabitNudges } from "./components/HabitNudges";
+import { LiveSync } from "./components/LiveSync";
 import {
   SunIcon,
   MoonIcon,
@@ -281,6 +282,7 @@ export default function App() {
       <ConnectionBanner />
       <GlobalErrorHandler />
       <HabitNudges />
+      <LiveSync />
     </div>
   );
 }

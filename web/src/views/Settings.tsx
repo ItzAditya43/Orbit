@@ -4,63 +4,133 @@ import { api } from "../api";
 import { useToastStore } from "../toastStore";
 import { TimeField } from "../components/TimeField";
 import { todayISO } from "../dates";
+import qrcode from "qrcode-generator";
+
+// A QR code drawn straight from the module grid — no image, no markup injection.
+function QrCode({ value, size = 184 }: { value: string; size?: number }) {
+  const qr = qrcode(0, "M");
+  qr.addData(value);
+  qr.make();
+  const count = qr.getModuleCount();
+  const margin = 2;
+  const cells: string[] = [];
+  for (let r = 0; r < count; r++) {
+    for (let c = 0; c < count; c++) if (qr.isDark(r, c)) cells.push(`M${c + margin} ${r + margin}h1v1h-1z`);
+  }
+  // Always dark-on-white, whatever the app theme: inverted codes fail on a lot of phone cameras.
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${count + margin * 2} ${count + margin * 2}`} role="img" aria-label="QR code for the access link" className="rounded-lg">
+      <rect width="100%" height="100%" fill="#fff" />
+      <path d={cells.join("")} fill="#000" />
+    </svg>
+  );
+}
 
 function DevicesSection() {
   const qc = useQueryClient();
-  const { data: device } = useQuery({ queryKey: ["device"], queryFn: api.device.info });
-  const { data: paired = [] } = useQuery({ queryKey: ["device", "paired"], queryFn: api.device.paired });
-  const [pairing, setPairing] = useState<{ token: string; expiresAt: number } | null>(null);
+  const toast = useToastStore((s) => s.push);
+  const { data: status } = useQuery({
+    queryKey: ["remote"],
+    queryFn: api.remote.status,
+    // The link takes a few seconds to come back after switching on; watch for it.
+    refetchInterval: (q) => (q.state.data?.enabled && !q.state.data.link ? 2000 : 15000),
+  });
+  const [busy, setBusy] = useState(false);
 
-  const startPairing = async () => {
-    const res = await api.device.startPairing();
-    setPairing({ token: res.token, expiresAt: res.expiresAt });
-    setTimeout(() => setPairing((p) => (p?.token === res.token ? null : p)), res.expiresAt - Date.now());
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    try {
+      qc.setQueryData(["remote"], await action());
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-sm font-semibold">Devices</h2>
+        <h2 className="text-sm font-semibold">Other devices</h2>
         <p className="text-xs text-neutral-400 mt-0.5">
-          Foundation for future device pairing — this device now has a stable identity, but there's no mobile app yet to
-          actually pair with, so nothing syncs beyond this machine.
+          Use Orbit from your phone or another computer, from anywhere. Scanning the code opens this same Orbit in that
+          device's browser — same data, live, nothing to sync. This computer has to be on with Orbit running.
         </p>
       </div>
-      {device && (
-        <div className="text-xs px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 space-y-1">
-          <p>
-            <span className="text-neutral-400">This device: </span>
-            {device.deviceName}
+
+      <div className="flex items-center gap-3">
+        <button
+          disabled={busy || !status}
+          onClick={() => run(() => api.remote.setEnabled(!status?.enabled))}
+          className={`text-xs px-3 py-1.5 rounded-lg disabled:opacity-50 ${
+            status?.enabled
+              ? "border border-neutral-200 dark:border-neutral-800"
+              : "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+          }`}
+        >
+          {status?.enabled ? "Turn off" : "Turn on access from other devices"}
+        </button>
+        {status?.enabled && <span className="text-xs text-emerald-600">On</span>}
+      </div>
+
+      {status?.enabled && !status.helperInstalled && (
+        <div className="text-xs rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-1">
+          <p className="font-medium">One-time setup needed</p>
+          <p className="text-neutral-500">
+            Reaching this computer from outside needs Cloudflare's free tunnel program. Install it once, then turn this off and
+            on again:
           </p>
-          <p className="text-neutral-400 truncate">Public key: {device.publicKey.replace(/\n/g, "").slice(0, 60)}...</p>
+          <code className="block px-2 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
+            sudo pacman -S cloudflared
+          </code>
+          <p className="text-neutral-400">(On other systems: install "cloudflared" from your package manager or cloudflare.com.)</p>
         </div>
       )}
-      <button onClick={startPairing} className="text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
-        Generate pairing code
-      </button>
-      {pairing && (
-        <div className="text-xs px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 space-y-1">
-          <p className="text-neutral-400">Pairing token (expires in 60s) — nothing can scan this yet:</p>
-          <p className="font-mono break-all">{pairing.token}</p>
-        </div>
-      )}
-      {paired.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium">Paired devices</p>
-          {paired.map((d) => (
-            <div key={d.id} className="flex items-center justify-between text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
-              <span>{d.device_name}</span>
+
+      {status?.enabled && status.error && <p className="text-xs text-red-500">{status.error}</p>}
+      {status?.enabled && status.helperInstalled && status.starting && <p className="text-xs text-neutral-400">Getting a link…</p>}
+
+      {status?.link && (
+        <div className="flex flex-wrap gap-4 items-start rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
+          <QrCode value={status.link} />
+          <div className="flex-1 min-w-[14rem] space-y-2 text-xs">
+            <p className="font-medium">Scan with your phone's camera</p>
+            <p className="text-neutral-400">
+              Or open this link on any device. Treat it like a password — anyone who has it can read and change everything in
+              your Orbit.
+            </p>
+            <input
+              readOnly
+              value={status.link}
+              onFocus={(e) => e.currentTarget.select()}
+              aria-label="Access link"
+              className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 font-mono text-[11px]"
+            />
+            <div className="flex gap-3">
               <button
                 onClick={async () => {
-                  await api.device.removePaired(d.id);
-                  qc.invalidateQueries({ queryKey: ["device", "paired"] });
+                  await navigator.clipboard.writeText(status.link!);
+                  toast("Link copied");
+                }}
+                className="px-2 py-1 rounded-md border border-neutral-200 dark:border-neutral-800"
+              >
+                Copy link
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => {
+                  if (confirm("Reset the key? Every device you've already connected will be signed out and need the new code.")) run(api.remote.resetKey);
                 }}
                 className="text-neutral-400 hover:text-red-500"
               >
-                Remove
+                Reset key
               </button>
             </div>
-          ))}
+            <p className="text-neutral-400">
+              The address is new each time Orbit starts, so after restarting this computer you'll need to scan again. Data
+              travels through Cloudflare's network, encrypted, to reach this computer.
+            </p>
+          </div>
         </div>
       )}
     </section>

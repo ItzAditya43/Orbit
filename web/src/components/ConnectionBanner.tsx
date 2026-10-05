@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useConnectionStore } from "../connectionStore";
 import { useQueryClient } from "@tanstack/react-query";
+import { BASE } from "../api";
 
-const HEALTH_URL = "http://localhost:4310/api/health";
+const HEALTH_URL = `${BASE}/health`;
 
 export function ConnectionBanner() {
   const { isConnected, setConnected } = useConnectionStore();
@@ -43,7 +44,7 @@ export function ConnectionBanner() {
 
   return (
     <div className="fixed top-0 inset-x-0 z-[70] bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-center gap-3">
-      <span>Can't reach the local server — nothing will save until it's back. Is it running?</span>
+      <span>Can't reach Orbit's server — nothing will save until it's back. Is Orbit running on the computer?</span>
       <button
         onClick={check}
         disabled={checking}

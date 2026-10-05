@@ -1,6 +1,16 @@
 import { useConnectionStore } from "./connectionStore";
 
-const BASE = "http://localhost:4310/api";
+// Where the API lives. The desktop app (and the dev server) load the UI from somewhere other
+// than the Orbit server, so they address it explicitly. A browser on another device has loaded
+// this page *from* the Orbit server — through the access link — so the API is simply the same
+// origin it came from, wherever that is.
+const servedByOrbit =
+  !import.meta.env.DEV && location.protocol.startsWith("http") && location.hostname !== "tauri.localhost";
+export const BASE = servedByOrbit ? `${location.origin}/api` : "http://localhost:4310/api";
+
+// Identifies this open window/tab to the server's change feed, so it can tell "someone else
+// changed something" apart from this window's own writes.
+export const CLIENT_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 export class ApiError extends Error {
   isConnectionError: boolean;
@@ -67,6 +77,14 @@ export interface Task {
   subtasks?: Task[];
 }
 
+export interface RemoteStatus {
+  enabled: boolean;
+  helperInstalled: boolean;
+  starting: boolean;
+  link: string | null;
+  error: string | null;
+}
+
 export interface BoundarySection {
   id: string;
   name: string;
@@ -104,7 +122,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     res = await fetch(`${BASE}${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: { "Content-Type": "application/json", "X-Orbit-Client": CLIENT_ID, ...(init?.headers ?? {}) },
     });
   } catch {
     // The local server is unreachable (not running, crashed, wrong port). This is the
@@ -380,6 +398,11 @@ export const api = {
     exportEncrypted: (passphrase: string) => req<any>(`/sync/export-encrypted`, { method: "POST", body: JSON.stringify({ passphrase }) }),
     importEncrypted: (body: { passphrase: string; salt: string; iv: string; authTag: string; ciphertext: string }) =>
       req<any>(`/sync/import-encrypted`, { method: "POST", body: JSON.stringify(body) }),
+  },
+  remote: {
+    status: () => req<RemoteStatus>(`/remote`),
+    setEnabled: (enabled: boolean) => req<RemoteStatus>(`/remote`, { method: "POST", body: JSON.stringify({ enabled }) }),
+    resetKey: () => req<RemoteStatus>(`/remote/reset-key`, { method: "POST" }),
   },
   attachments: {
     list: (entityType: string, entityId: string) =>
