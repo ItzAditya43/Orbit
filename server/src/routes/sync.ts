@@ -3,32 +3,73 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { db } from "../db.js";
-import { backupsDir } from "../scheduler.js";
+import { backupsDir, BACKUP_TABLES } from "../scheduler.js";
 
 export const syncRouter = Router();
 
-const TABLES = ["projects", "tags", "task_tags", "tasks", "task_dependencies", "calendar_events", "goals", "habits", "habit_logs", "notes"];
-
 function dumpAll() {
   const dump: Record<string, unknown[]> = {};
-  for (const table of TABLES) {
+  for (const table of BACKUP_TABLES) {
     dump[table] = db.prepare(`SELECT * FROM ${table}`).all();
   }
   return { exportedAt: new Date().toISOString(), version: 1, data: dump };
 }
 
+// Link tables have no id of their own; their whole row is the key.
+const LINK_TABLES = new Set(["task_tags", "task_dependencies", "goal_tags", "habit_tags"]);
+// Keyed by id but also unique on another column (one log per habit per day, one check-in per
+// date) — an incoming row can collide with an existing one under a different id.
+const REPLACE_TABLES = new Set(["habit_logs", "daily_checkins"]);
+
+// Merges a backup into the current database: rows with a known id are updated in place, new
+// ones are added, nothing already here is removed.
+//
+// Deliberately an upsert rather than INSERT OR REPLACE — REPLACE deletes the old row first,
+// and with foreign keys on that cascaded into everything hanging off it, so restoring a backup
+// wiped the tags, subtasks and dependencies of every task it touched.
 function importAll(data: Record<string, any[]>) {
+  // Tags are unique by name; a backup's tag can share a name with an existing tag under a
+  // different id. Those are folded into the existing tag instead of failing the import.
+  const tagIdRemap = new Map<string, string>();
   const importTx = db.transaction(() => {
-    for (const table of TABLES) {
+    for (const table of BACKUP_TABLES) {
       const rows = data[table];
       if (!Array.isArray(rows) || rows.length === 0) continue;
-      const columns = Object.keys(rows[0]);
-      const placeholders = columns.map(() => "?").join(",");
-      const stmt = db.prepare(`INSERT OR REPLACE INTO ${table} (${columns.join(",")}) VALUES (${placeholders})`);
-      for (const row of rows) stmt.run(...columns.map((c) => row[c]));
+      const known = new Set((db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name));
+      for (const original of rows) {
+        if (!original || typeof original !== "object") continue;
+        const row = { ...original };
+        if (table === "tags") {
+          const sameName = db.prepare("SELECT id FROM tags WHERE name = ? AND id != ?").get(row.name, row.id) as { id: string } | undefined;
+          if (sameName) {
+            tagIdRemap.set(row.id, sameName.id);
+            continue;
+          }
+        }
+        if ("tag_id" in row && tagIdRemap.has(row.tag_id)) row.tag_id = tagIdRemap.get(row.tag_id);
+        // Only columns this version of the schema actually has — a backup from a different
+        // version shouldn't fail on a column that's since been added or dropped.
+        const columns = Object.keys(row).filter((c) => known.has(c));
+        if (columns.length === 0) continue;
+        const placeholders = columns.map(() => "?").join(",");
+        const sql = LINK_TABLES.has(table)
+          ? `INSERT OR IGNORE INTO ${table} (${columns.join(",")}) VALUES (${placeholders})`
+          : REPLACE_TABLES.has(table)
+            ? `INSERT OR REPLACE INTO ${table} (${columns.join(",")}) VALUES (${placeholders})`
+            : `INSERT INTO ${table} (${columns.join(",")}) VALUES (${placeholders})
+               ON CONFLICT(id) DO UPDATE SET ${columns.filter((c) => c !== "id").map((c) => `${c} = excluded.${c}`).join(", ") || "id = id"}`;
+        db.prepare(sql).run(...columns.map((c) => row[c]));
+      }
     }
   });
-  importTx();
+  // Rows arrive in backup order, not dependency order (a subtask can precede its parent), so
+  // foreign keys are checked off for the duration rather than per row.
+  db.pragma("foreign_keys = OFF");
+  try {
+    importTx();
+  } finally {
+    db.pragma("foreign_keys = ON");
+  }
 }
 
 // Full local export/import — the "backup/restore" half of §27 Sync. Multi-device sync with
@@ -55,7 +96,7 @@ syncRouter.get("/export", (_req, res) => {
 
 syncRouter.post("/import", (req, res) => {
   const { data } = req.body ?? {};
-  if (!data) return res.status(400).json({ error: "data required" });
+  if (!data || typeof data !== "object") return res.status(400).json({ error: "data required" });
   importAll(data);
   res.json({ ok: true });
 });
@@ -91,15 +132,18 @@ syncRouter.post("/import-encrypted", (req, res) => {
   if (!passphrase || !salt || !iv || !authTag || !ciphertext) {
     return res.status(400).json({ error: "passphrase, salt, iv, authTag, ciphertext all required" });
   }
+  let parsed: any;
   try {
     const key = crypto.scryptSync(passphrase, Buffer.from(salt, "base64"), 32);
     const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64"));
     decipher.setAuthTag(Buffer.from(authTag, "base64"));
     const decrypted = Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64")), decipher.final()]).toString("utf8");
-    const parsed = JSON.parse(decrypted);
-    importAll(parsed.data);
-    res.json({ ok: true });
+    parsed = JSON.parse(decrypted);
   } catch {
-    res.status(400).json({ error: "wrong passphrase or corrupted backup" });
+    return res.status(400).json({ error: "wrong passphrase or corrupted backup" });
   }
+  if (!parsed?.data || typeof parsed.data !== "object") return res.status(400).json({ error: "backup has no data" });
+  // Outside the try: a failure while writing rows is a real error, not a bad passphrase.
+  importAll(parsed.data);
+  res.json({ ok: true });
 });

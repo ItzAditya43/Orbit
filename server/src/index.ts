@@ -58,6 +58,18 @@ app.use("/api/attachments", attachmentsRouter);
 app.use("/api/boards", boardsRouter);
 app.use("/api/device", deviceRouter);
 
+// Last-resort handler so a thrown error reaches the client as JSON it can show, not Express's
+// default HTML stack-trace page. A foreign-key failure means the request pointed at a row that
+// doesn't exist (e.g. logging a habit that was just deleted), which is a 404, not a crash.
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) return next(err);
+  if (err?.code === "SQLITE_CONSTRAINT_FOREIGNKEY") return res.status(404).json({ error: "referenced item not found" });
+  if (err?.type === "entity.too.large") return res.status(413).json({ error: "request too large" });
+  if (err?.type === "entity.parse.failed") return res.status(400).json({ error: "invalid JSON" });
+  console.error(err);
+  res.status(500).json({ error: err?.message ?? "internal error" });
+});
+
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4310;
 app.listen(PORT, () => {
   console.log(`orbit server listening on http://localhost:${PORT}`);

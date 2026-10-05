@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./db.js";
+import { markTaskDone } from "./taskCompletion.js";
 
 // The internal AI tool registry (§17/§18 of the spec). Every tool is a plain deterministic
 // function — this is the layer an LLM (local Ollama, or any OpenAI-compatible endpoint) calls
@@ -16,9 +17,7 @@ export const tools = {
     return db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
   },
   complete_task(args: { taskId: string }) {
-    const now = new Date().toISOString();
-    db.prepare("UPDATE tasks SET status = 'done', completed_at = ?, updated_at = ? WHERE id = ?").run(now, now, args.taskId);
-    return db.prepare("SELECT * FROM tasks WHERE id = ?").get(args.taskId);
+    return markTaskDone(args.taskId);
   },
   move_task(args: { taskId: string; projectId: string }) {
     db.prepare("UPDATE tasks SET project_id = ?, updated_at = ? WHERE id = ?").run(

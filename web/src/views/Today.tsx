@@ -69,13 +69,18 @@ export default function Today() {
     toast(`"${task.title}" deleted`);
   };
 
-  const tagFiltered = tasks.filter((t) => matchesTag(t, tagFilter));
-  const open = tagFiltered.filter((t) => t.status !== "done");
-  const done = tagFiltered.filter((t) => t.status === "done");
-  const total = tasks.length;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  // The "today" view only ever returns open tasks, so what's been finished today has to be
+  // fetched separately — without it "Completed" sat at 0 and the progress bar never moved.
+  const { data: doneTasks = [] } = useQuery({
+    queryKey: ["tasks", "done-today", todayStr],
+    queryFn: () => api.tasks.list({ status: "done" }),
+  });
+  const open = tasks.filter((t) => t.status !== "done" && matchesTag(t, tagFilter));
+  const done = doneTasks.filter((t) => (t.completed_at ?? "").slice(0, 10) === todayStr && matchesTag(t, tagFilter));
+  const total = open.length + done.length;
   const pct = total > 0 ? Math.round((done.length / total) * 100) : 0;
 
-  const todayStr = new Date().toISOString().slice(0, 10);
   const focusToday = focusSessions.filter((s: any) => s.was_completed && (s.started_at ?? "").slice(0, 10) === todayStr);
   const focusMinutes = focusToday.reduce((sum: number, s: any) => sum + (s.planned_minutes ?? 25), 0);
 

@@ -371,7 +371,7 @@ export default function Settings() {
         <h2 className="text-sm font-medium">Backup & restore</h2>
         <p className="text-xs text-neutral-400">
           A full local backup is written automatically once a day (the last 14 are kept) at{" "}
-          <code>server/data/backups/</code>. You can also export/import an encrypted copy manually.
+          <code>~/.local/share/orbit/backups/</code>. You can also export/import an encrypted copy manually.
         </p>
         {backups.length > 0 && (
           <div className="space-y-1">

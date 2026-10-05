@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import { db } from "../db.js";
+import { db, ftsQuery } from "../db.js";
 import { fireTrigger } from "../automationEngine.js";
+import { markTaskDone } from "../taskCompletion.js";
 
 export const tasksRouter = Router();
 
@@ -43,13 +44,15 @@ tasksRouter.get("/", (req, res) => {
   const params: unknown[] = [];
 
   if (q) {
+    const match = ftsQuery(q);
+    if (!match) return res.json([]);
     const rows = db
       .prepare(
         `SELECT tasks.* FROM tasks_fts
          JOIN tasks ON tasks.rowid = tasks_fts.rowid
          WHERE tasks_fts MATCH ? AND tasks.deleted_at IS NULL ORDER BY rank`
       )
-      .all(q + "*");
+      .all(match);
     return res.json(rows.map(hydrate));
   }
 
@@ -350,39 +353,8 @@ tasksRouter.post("/:id/snooze", (req, res) => {
 });
 
 tasksRouter.post("/:id/complete", (req, res) => {
-  const now = new Date().toISOString();
-  db.prepare("UPDATE tasks SET status = 'done', completed_at = ?, updated_at = ? WHERE id = ?").run(
-    now,
-    now,
-    req.params.id
-  );
-  const task: any = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
-  if (task?.recurrence && task.recurrence !== "none" && task.due_date) {
-    const next = new Date(task.due_date);
-    if (task.recurrence === "daily") next.setDate(next.getDate() + 1);
-    else if (task.recurrence === "weekly") next.setDate(next.getDate() + 7);
-    else if (task.recurrence === "monthly") next.setMonth(next.getMonth() + 1);
-    else if (task.recurrence === "interval") next.setDate(next.getDate() + (task.recurrence_interval_days || 1));
-    else if (task.recurrence === "custom_days") {
-      const days: number[] = task.recurrence_days ? JSON.parse(task.recurrence_days) : [];
-      if (days.length) {
-        do { next.setDate(next.getDate() + 1); } while (!days.includes(next.getUTCDay()));
-      } else {
-        next.setDate(next.getDate() + 1);
-      }
-    }
-    const nextDue = next.toISOString().slice(0, 10);
-    if (!task.recurrence_end_date || nextDue <= task.recurrence_end_date) {
-      const newId = randomUUID();
-      db.prepare(
-        `INSERT INTO tasks (id, title, notes, project_id, priority, due_date, recurrence, recurrence_interval_days, recurrence_days, recurrence_start_date, recurrence_end_date, estimate_minutes, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-      ).run(
-        newId, task.title, task.notes, task.project_id, task.priority, nextDue,
-        task.recurrence, task.recurrence_interval_days, task.recurrence_days, task.recurrence_start_date, task.recurrence_end_date, task.estimate_minutes, now, now
-      );
-    }
-  }
+  const task = markTaskDone(req.params.id);
+  if (!task) return res.status(404).json({ error: "not found" });
   fireTrigger("task_completed", { taskId: task.id, taskTitle: task.title, projectId: task.project_id });
   res.json(hydrate(task));
 });
@@ -429,6 +401,9 @@ tasksRouter.get("/:id/dependencies", (req, res) => {
 tasksRouter.post("/:id/dependencies", (req, res) => {
   const { blocksTaskId } = req.body ?? {};
   if (!blocksTaskId) return res.status(400).json({ error: "blocksTaskId required" });
+  if (blocksTaskId === req.params.id) return res.status(400).json({ error: "a task can't be blocked by itself" });
+  const exists = db.prepare("SELECT COUNT(*) c FROM tasks WHERE id IN (?, ?)").get(req.params.id, blocksTaskId) as { c: number };
+  if (exists.c < 2) return res.status(404).json({ error: "not found" });
   db.prepare("INSERT OR IGNORE INTO task_dependencies (task_id, blocks_task_id) VALUES (?,?)").run(
     req.params.id,
     blocksTaskId
@@ -450,10 +425,12 @@ tasksRouter.post("/bulk", (req, res) => {
   if (!Array.isArray(taskIds) || taskIds.length === 0) return res.status(400).json({ error: "taskIds required" });
   const now = new Date().toISOString();
 
+  const completed: any[] = [];
   const run = db.transaction(() => {
     for (const id of taskIds) {
       if (action === "complete") {
-        db.prepare("UPDATE tasks SET status = 'done', completed_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
+        const task = markTaskDone(id);
+        if (task) completed.push(task);
       } else if (action === "reopen") {
         db.prepare("UPDATE tasks SET status = 'open', completed_at = NULL, updated_at = ? WHERE id = ?").run(now, id);
       } else if (action === "delete") {
@@ -468,6 +445,9 @@ tasksRouter.post("/bulk", (req, res) => {
     }
   });
   run();
+  for (const task of completed) {
+    fireTrigger("task_completed", { taskId: task.id, taskTitle: task.title, projectId: task.project_id });
+  }
 
   res.json({ ok: true, count: taskIds.length });
 });

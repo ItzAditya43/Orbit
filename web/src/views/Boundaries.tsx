@@ -35,8 +35,13 @@ export default function Boundaries() {
     invalidateBoundaries();
   };
 
-  const existingCategories = Array.from(new Set(allBoundaries.map((b: any) => b.category)));
-  const displayCategories = existingCategories.length > 0 ? existingCategories : DEFAULT_CATEGORIES;
+  // Sections are just the categories that currently hold an active item — deriving them from
+  // removed rows too meant a section could never go away once anything had been added to it.
+  const activeCategories: string[] = Array.from(new Set(boundaries.map((b: any) => b.category)));
+  const displayCategories = activeCategories.length > 0 ? activeCategories : DEFAULT_CATEGORIES;
+  const suggestedCategories: string[] = Array.from(
+    new Set([...activeCategories, ...allBoundaries.map((b: any) => b.category), ...DEFAULT_CATEGORIES])
+  );
 
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [categoryNameDraft, setCategoryNameDraft] = useState("");
@@ -58,6 +63,12 @@ export default function Boundaries() {
       return;
     }
     await Promise.all(items.map((b: any) => api.boundaries.remove(b.id)));
+    invalidateBoundaries();
+  };
+
+  const purge = async (ids: string[], what: string) => {
+    if (!confirm(`Permanently delete ${what}? This can't be undone.`)) return;
+    await Promise.all(ids.map((id) => api.boundaries.purge(id)));
     invalidateBoundaries();
   };
 
@@ -165,7 +176,7 @@ export default function Boundaries() {
             className="w-32 shrink-0 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-2 py-2 text-sm"
           />
           <datalist id="boundary-categories">
-            {displayCategories.map((c: string) => (
+            {suggestedCategories.map((c: string) => (
               <option key={c} value={c} />
             ))}
           </datalist>
@@ -292,21 +303,39 @@ export default function Boundaries() {
 
         {showInactive && inactiveBoundaries.length > 0 && (
           <div className="space-y-1.5 pt-2">
-            <p className="text-xs uppercase tracking-wide text-neutral-400">Removed</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs uppercase tracking-wide text-neutral-400">Removed</p>
+              <button
+                onClick={() =>
+                  purge(
+                    inactiveBoundaries.map((b: any) => b.id),
+                    `all ${inactiveBoundaries.length} removed item${inactiveBoundaries.length === 1 ? "" : "s"}`
+                  )
+                }
+                className="text-xs text-neutral-400 hover:text-red-500"
+              >
+                delete all forever
+              </button>
+            </div>
             {inactiveBoundaries.map((b: any) => (
               <div key={b.id} className="flex items-center justify-between text-sm px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800 opacity-60">
                 <span>
                   {b.name} <span className="text-xs text-neutral-400">({b.category})</span>
                 </span>
-                <button
-                  onClick={async () => {
-                    await api.boundaries.update(b.id, { isActive: true });
-                    invalidateBoundaries();
-                  }}
-                  className="text-xs text-neutral-400 hover:text-emerald-500"
-                >
-                  restore
-                </button>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    onClick={async () => {
+                      await api.boundaries.update(b.id, { isActive: true });
+                      invalidateBoundaries();
+                    }}
+                    className="text-xs text-neutral-400 hover:text-emerald-500"
+                  >
+                    restore
+                  </button>
+                  <button onClick={() => purge([b.id], `"${b.name}"`)} className="text-xs text-neutral-400 hover:text-red-500">
+                    delete forever
+                  </button>
+                </div>
               </div>
             ))}
           </div>

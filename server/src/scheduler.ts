@@ -6,7 +6,16 @@ import { dataDir } from "./dataDir.js";
 
 export const backupsDir = path.join(dataDir, "backups");
 
-const TABLES = ["projects", "tags", "task_tags", "tasks", "task_dependencies", "calendar_events", "goals", "habits", "habit_logs", "notes", "daily_checkins", "attachments", "boards", "paired_devices"];
+// Everything a user would call "my data", parents before the rows that reference them. Used
+// for both the daily automatic backup and manual export/import (routes/sync.ts) — those two
+// used to keep separate lists and both had drifted behind the schema, so backups quietly left
+// out whole features (priority areas, time entries, goal milestones, automations, ...).
+export const BACKUP_TABLES = [
+  "projects", "tags", "tasks", "task_tags", "task_dependencies", "calendar_events",
+  "goals", "goal_milestones", "goal_tags", "habits", "habit_tags", "habit_logs",
+  "notes", "daily_checkins", "boundaries", "scope_review_items", "time_entries", "focus_sessions",
+  "task_templates", "saved_filters", "automations", "attachments", "boards", "paired_devices",
+];
 
 function getSetting(key: string, fallback: unknown) {
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as any;
@@ -58,7 +67,7 @@ function runScheduledBackup() {
   if (lastBackup === today) return;
 
   const dump: Record<string, unknown[]> = {};
-  for (const table of TABLES) {
+  for (const table of BACKUP_TABLES) {
     dump[table] = db.prepare(`SELECT * FROM ${table}`).all();
   }
   const file = path.join(backupsDir, `backup-${today}.json`);

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import { db } from "../db.js";
+import { db, ftsQuery } from "../db.js";
 
 export const notesRouter = Router();
 
@@ -8,12 +8,14 @@ notesRouter.get("/", (req, res) => {
   const { projectId, taskId, q } = req.query as Record<string, string | undefined>;
 
   if (q) {
+    const match = ftsQuery(q);
+    if (!match) return res.json([]);
     const rows = db
       .prepare(
         `SELECT notes.* FROM notes_fts JOIN notes ON notes.rowid = notes_fts.rowid
          WHERE notes_fts MATCH ? AND notes.deleted_at IS NULL ORDER BY rank`
       )
-      .all(q + "*");
+      .all(match);
     return res.json(rows);
   }
 

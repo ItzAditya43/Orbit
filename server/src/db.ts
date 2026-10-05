@@ -266,6 +266,16 @@ CREATE TRIGGER IF NOT EXISTS tasks_au AFTER UPDATE ON tasks BEGIN
 END;
 `);
 
+// Turns free-typed search text into a safe FTS5 MATCH expression: each word quoted (so
+// punctuation and FTS keywords like AND/NOT/- can't be parsed as query syntax and throw), all
+// words required, the last one prefix-matched for search-as-you-type. Returns null when there's
+// nothing searchable in the input.
+export function ftsQuery(text: string): string | null {
+  const words = text.match(/[\p{L}\p{N}_]+/gu);
+  if (!words) return null;
+  return words.map((w) => `"${w}"`).join(" ") + "*";
+}
+
 // Lightweight migration for columns added after the initial CREATE TABLE — SQLite's
 // CREATE TABLE IF NOT EXISTS won't retrofit new columns onto an already-existing db file.
 const notesColumns = db.prepare("PRAGMA table_info(notes)").all() as { name: string }[];

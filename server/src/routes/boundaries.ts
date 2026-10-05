@@ -39,8 +39,14 @@ boundariesRouter.patch("/:id", (req, res) => {
   res.json(db.prepare("SELECT * FROM boundaries WHERE id = ?").get(req.params.id));
 });
 
+// Soft-removes by default (the row moves to the "Removed" list and can be restored);
+// ?permanent=true actually deletes it, which is the only way to get rid of a row for good.
 boundariesRouter.delete("/:id", (req, res) => {
-  db.prepare("UPDATE boundaries SET is_active = 0 WHERE id = ?").run(req.params.id);
+  if (req.query.permanent === "true") {
+    db.prepare("DELETE FROM boundaries WHERE id = ?").run(req.params.id);
+  } else {
+    db.prepare("UPDATE boundaries SET is_active = 0 WHERE id = ?").run(req.params.id);
+  }
   res.status(204).end();
 });
 

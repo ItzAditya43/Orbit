@@ -212,6 +212,7 @@ export const api = {
     update: (id: string, body: { name?: string; category?: string; isActive?: boolean; projectId?: string | null }) =>
       req<any>(`/boundaries/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     remove: (id: string) => req<void>(`/boundaries/${id}`, { method: "DELETE" }),
+    purge: (id: string) => req<void>(`/boundaries/${id}?permanent=true`, { method: "DELETE" }),
     check: (label: string) => req<any>(`/boundaries/check`, { method: "POST", body: JSON.stringify({ label }) }),
   },
   scopeReview: {

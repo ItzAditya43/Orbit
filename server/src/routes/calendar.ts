@@ -6,7 +6,10 @@ export const calendarRouter = Router();
 
 // GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD
 calendarRouter.get("/", (req, res) => {
-  const { from, to } = req.query as Record<string, string | undefined>;
+  const { from, to: toParam } = req.query as Record<string, string | undefined>;
+  // A bare YYYY-MM-DD `to` means "through the end of that day" — compared as-is it sorts before
+  // every timed entry on that date and silently dropped the range's whole last day.
+  const to = toParam && toParam.length === 10 ? `${toParam}T23:59:59.999Z` : toParam;
   const clauses: string[] = [];
   const params: unknown[] = [];
   if (from) { clauses.push("e.starts_at >= ?"); params.push(from); }
@@ -55,7 +58,7 @@ calendarRouter.get("/", (req, res) => {
       .prepare(
         `SELECT t.id, t.title, t.due_date, t.recurrence_start_date, t.priority, t.project_id, t.recurrence, t.recurrence_interval_days, t.recurrence_days, t.recurrence_end_date, p.color AS project_color
          FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
-         WHERE t.status != 'done' AND (t.due_date IS NOT NULL OR t.recurrence_start_date IS NOT NULL) AND t.recurrence IN ('daily','weekly','interval','custom_days')`
+         WHERE t.status != 'done' AND t.deleted_at IS NULL AND (t.due_date IS NOT NULL OR t.recurrence_start_date IS NOT NULL) AND t.recurrence IN ('daily','weekly','interval','custom_days')`
       )
       .all() as any[];
     const rangeStartIso = from.slice(0, 10);
