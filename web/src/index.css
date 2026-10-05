@@ -14,6 +14,31 @@ body {
   @apply bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
 }
 
+/* Phones: every view is laid out with generous desktop padding and fixed 2-3 column grids.
+   Rather than touch each view, tighten the page padding and let those grids stack. */
+@media (max-width: 640px) {
+  main .p-8 {
+    padding: 1rem;
+  }
+  main .grid.grid-cols-2:not(.keep-cols) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* One-line "field, field, button" rows don't fit: let them wrap, text fields on their own line. */
+  main form.flex,
+  main .mobile-wrap {
+    flex-wrap: wrap;
+  }
+  main form.flex > input:not([type="checkbox"]):not([type="radio"]):not([type="date"]) {
+    flex: 1 1 100%;
+  }
+  /* 16px inputs — anything smaller makes iOS zoom the page on focus. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

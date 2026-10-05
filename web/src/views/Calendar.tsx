@@ -204,7 +204,7 @@ export default function Calendar() {
           <h1 className="text-xl font-semibold">Calendar</h1>
           <p className="text-sm text-neutral-400">{label}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {view !== "agenda" && (
             <div className="flex items-center gap-1">
               <button onClick={() => nav(-1)} className="h-8 w-8 flex items-center justify-center rounded-lg border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500">

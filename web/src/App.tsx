@@ -28,6 +28,7 @@ import {
   BarChartIcon,
   SearchIcon,
   PlusIcon,
+  MenuIcon,
   FilterIcon,
   TagIcon,
   TrashIcon,
@@ -125,6 +126,9 @@ export default function App() {
   const { open: openQuickAdd } = useQuickAddStore();
   const location = useLocation();
   const { collapsed, toggle: toggleGroup } = useCollapsedGroups();
+  // On narrow screens the sidebar is a slide-over drawer instead of a fixed column.
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => setNavOpen(false), [location.pathname]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -144,8 +148,13 @@ export default function App() {
   }, [openQuickAdd]);
 
   return (
-    <div className="flex h-screen">
-      <aside className="w-60 shrink-0 border-r border-neutral-200 dark:border-neutral-800 flex flex-col p-3 gap-4 overflow-y-auto bg-neutral-50/60 dark:bg-neutral-950/60">
+    <div className="flex h-dvh">
+      {navOpen && <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={() => setNavOpen(false)} />}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 transition-transform duration-200 md:static md:z-auto md:w-60 md:translate-x-0 shrink-0 border-r border-neutral-200 dark:border-neutral-800 flex flex-col p-3 gap-4 overflow-y-auto bg-neutral-50 dark:bg-neutral-950 md:bg-neutral-50/60 md:dark:bg-neutral-950/60 ${
+          navOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
         <div className="flex items-center gap-2 px-2 pt-1">
           <img src="/logo.png" alt="" className="h-6 w-6 rounded-md" />
           <span className="text-sm font-semibold tracking-tight">Orbit</span>
@@ -217,6 +226,21 @@ export default function App() {
           {theme === "dark" ? "Light mode" : "Dark mode"}
         </button>
       </aside>
+      <div className="flex-1 min-w-0 flex flex-col">
+        <header className="md:hidden flex items-center gap-2 px-3 py-2 border-b border-neutral-200 dark:border-neutral-800">
+          <button onClick={() => setNavOpen(true)} aria-label="Open menu" className="p-1.5 -ml-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-900">
+            <MenuIcon size={20} />
+          </button>
+          <img src="/logo.png" alt="" className="h-5 w-5 rounded-md" />
+          <span className="text-sm font-semibold tracking-tight">Orbit</span>
+          <button
+            onClick={openQuickAdd}
+            aria-label="Quick add"
+            className="ml-auto p-1.5 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+          >
+            <PlusIcon size={18} />
+          </button>
+        </header>
       <main className="flex-1 overflow-y-auto relative">
         <Routes>
           <Route path="/" element={<Today />} />
@@ -248,6 +272,7 @@ export default function App() {
         </Routes>
         <AICommandBar />
       </main>
+      </div>
       <QuickAddModal />
       <TaskDetailDrawer />
       <ToastStack />
