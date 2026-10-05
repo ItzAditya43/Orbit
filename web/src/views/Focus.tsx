@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
+import { dayOf, todayISO } from "../dates";
 
 const DURATIONS = [15, 25, 45, 60];
 const SHORT_BREAK_MINUTES = 5;
@@ -146,8 +147,8 @@ export default function Focus() {
   const isBreak = phase === "break";
   const ringColor = isBreak ? "#34d399" : "#171717";
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todaysSessions = sessions.filter((s: any) => s.was_completed && (s.started_at ?? "").slice(0, 10) === todayStr);
+  const todayStr = todayISO();
+  const todaysSessions = sessions.filter((s: any) => s.was_completed && dayOf(s.started_at) === todayStr);
 
   const content = (
     <div className="max-w-md mx-auto p-8 flex flex-col items-center gap-6 pt-16">

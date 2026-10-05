@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
+import { addDays, localDaySql, localToday } from "../dates.js";
 
 export const analyticsRouter = Router();
 
@@ -14,12 +15,12 @@ analyticsRouter.get("/summary", (req, res) => {
   // tiles like "Time tracked (range)" and shouldn't be the only one that ignores the toggle.
   const doneClauses = ["deleted_at IS NULL", "status = 'done'"];
   const doneParams: unknown[] = [];
-  if (from) { doneClauses.push("completed_at >= ?"); doneParams.push(from); }
-  if (to) { doneClauses.push("completed_at <= ?"); doneParams.push(to + "T23:59:59"); }
+  if (from) { doneClauses.push("date(completed_at, 'localtime') >= ?"); doneParams.push(from); }
+  if (to) { doneClauses.push("date(completed_at, 'localtime') <= ?"); doneParams.push(to); }
   const totalDone = (db.prepare(`SELECT COUNT(*) c FROM tasks WHERE ${doneClauses.join(" AND ")}`).get(...doneParams) as any).c;
   const overdue = (
     db
-      .prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < date('now')")
+      .prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < date('now', 'localtime')")
       .get() as any
   ).c;
   const estimateVsActual = db
@@ -30,7 +31,7 @@ analyticsRouter.get("/summary", (req, res) => {
   const completedByDayParams = [from, to].filter(Boolean);
   const completedByDay = db
     .prepare(
-      `SELECT day, COUNT(*) AS count FROM (SELECT substr(completed_at, 1, 10) AS day FROM tasks WHERE deleted_at IS NULL AND completed_at IS NOT NULL)
+      `SELECT day, COUNT(*) AS count FROM (SELECT date(completed_at, 'localtime') AS day FROM tasks WHERE deleted_at IS NULL AND completed_at IS NOT NULL)
        WHERE 1=1 ${fromClause} ${toClause} GROUP BY day ORDER BY day DESC LIMIT ?`
     )
     .all(...completedByDayParams, days);
@@ -39,13 +40,13 @@ analyticsRouter.get("/summary", (req, res) => {
   const activityByDay = db
     .prepare(
       `SELECT day, COUNT(*) AS count FROM (
-         SELECT substr(completed_at, 1, 10) AS day FROM tasks WHERE deleted_at IS NULL AND completed_at IS NOT NULL
+         SELECT date(completed_at, 'localtime') AS day FROM tasks WHERE deleted_at IS NULL AND completed_at IS NOT NULL
          UNION ALL
          SELECT date FROM habit_logs
          UNION ALL
-         SELECT substr(created_at, 1, 10) FROM notes WHERE deleted_at IS NULL
+         SELECT date(created_at, 'localtime') FROM notes WHERE deleted_at IS NULL
          UNION ALL
-         SELECT substr(updated_at, 1, 10) FROM boards
+         SELECT date(updated_at, 'localtime') FROM boards
        )
        WHERE 1=1 ${fromClause} ${toClause} GROUP BY day ORDER BY day DESC LIMIT ?`
     )
@@ -53,7 +54,7 @@ analyticsRouter.get("/summary", (req, res) => {
   const focusMinutesByDay = db
     .prepare(
       `SELECT day, SUM(minutes) AS minutes FROM (
-         SELECT substr(started_at, 1, 10) AS day, (julianday(COALESCE(ended_at, started_at)) - julianday(started_at)) * 1440 AS minutes
+         SELECT date(started_at, 'localtime') AS day, (julianday(COALESCE(ended_at, started_at)) - julianday(started_at)) * 1440 AS minutes
          FROM focus_sessions WHERE was_completed = 1
        ) WHERE 1=1 ${fromClause} ${toClause} GROUP BY day ORDER BY day DESC LIMIT ?`
     )
@@ -78,16 +79,13 @@ analyticsRouter.get("/summary", (req, res) => {
       amount: number;
     }[];
     const dates = logs.map((l) => l.date);
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const today = localToday();
     let streak = 0;
-    if (dates.length && (dates[0] === today || dates[0] === yesterday)) {
+    if (dates.length && (dates[0] === today || dates[0] === addDays(today, -1))) {
       streak = 1;
-      const cursor = new Date(dates[0]);
       for (let i = 1; i < dates.length; i++) {
-        cursor.setDate(cursor.getDate() - 1);
-        if (dates[i] === cursor.toISOString().slice(0, 10)) streak++;
-        else break;
+        if (dates[i] !== addDays(dates[0], -i)) break;
+        streak++;
       }
     }
     const inRange = dates.filter((d) => (!from || d >= from) && (!to || d <= to)).length;
@@ -108,21 +106,21 @@ analyticsRouter.get("/summary", (req, res) => {
 
   const notesClauses = ["deleted_at IS NULL"];
   const notesParams: unknown[] = [];
-  if (from) { notesClauses.push("created_at >= ?"); notesParams.push(from); }
-  if (to) { notesClauses.push("created_at <= ?"); notesParams.push(to + "T23:59:59"); }
+  if (from) { notesClauses.push("date(created_at, 'localtime') >= ?"); notesParams.push(from); }
+  if (to) { notesClauses.push("date(created_at, 'localtime') <= ?"); notesParams.push(to); }
   const totalNotes = (db.prepare(`SELECT COUNT(*) c FROM notes WHERE ${notesClauses.join(" AND ")}`).get(...notesParams) as any).c;
 
   const timeTrackedMinutes = (
     db
       .prepare(
         `SELECT COALESCE(SUM(duration_seconds), 0) / 60.0 AS minutes FROM time_entries
-         WHERE ended_at IS NOT NULL ${from ? "AND started_at >= ?" : ""} ${to ? "AND started_at <= ?" : ""}`
+         WHERE ended_at IS NOT NULL ${from ? "AND date(started_at, 'localtime') >= ?" : ""} ${to ? "AND date(started_at, 'localtime') <= ?" : ""}`
       )
       .get(...[from, to].filter(Boolean)) as any
   ).minutes;
 
   const upcomingEvents = (
-    db.prepare("SELECT COUNT(*) c FROM calendar_events WHERE starts_at >= datetime('now')").get() as any
+    db.prepare(`SELECT COUNT(*) c FROM calendar_events WHERE ${localDaySql("starts_at")} >= date('now', 'localtime')`).get() as any
   ).c;
 
   const checkinClauses: string[] = [];

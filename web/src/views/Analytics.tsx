@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api";
 import { Heatmap } from "../components/Heatmap";
+import { daysFromToday, todayISO } from "../dates";
 
 function Bar({ label, value, max }: { label: string; value: number; max: number }) {
   const pct = max > 0 ? Math.max(4, Math.round((value / max) * 100)) : 0;
@@ -22,20 +23,12 @@ const RANGES = [
   { label: "90 days", days: 90 },
 ];
 
-// Local Y/M/D components, not toISOString() — toISOString() converts to UTC first, which
-// shifts the date back a day in any timezone ahead of UTC, silently excluding "today" from
-// range-scoped stats. Same bug and same fix as Calendar.tsx's day-key generation.
-function localISODate(d: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 export default function Analytics() {
   const [rangeDays, setRangeDays] = useState(14);
-  const to = localISODate(new Date());
-  const from = localISODate(new Date(Date.now() - rangeDays * 86400000));
+  const to = todayISO();
+  const from = daysFromToday(-rangeDays);
   const { data, isLoading } = useQuery({ queryKey: ["analytics", from, to], queryFn: () => api.analytics.summary({ from, to }) });
-  const heatmapFrom = localISODate(new Date(Date.now() - 112 * 86400000));
+  const heatmapFrom = daysFromToday(-112);
   const { data: heatmapData } = useQuery({ queryKey: ["analytics", "heatmap"], queryFn: () => api.analytics.summary({ from: heatmapFrom, to }) });
 
   if (isLoading || !data) return <div className="p-8 text-sm text-neutral-400">Loading...</div>;

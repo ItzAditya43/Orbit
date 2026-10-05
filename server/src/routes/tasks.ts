@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { db, ftsQuery } from "../db.js";
 import { fireTrigger } from "../automationEngine.js";
 import { markTaskDone } from "../taskCompletion.js";
+import { addDays, addMonths, localDaySql, localToday } from "../dates.js";
 
 export const tasksRouter = Router();
 
@@ -59,15 +60,15 @@ tasksRouter.get("/", (req, res) => {
   if (view === "inbox") {
     clauses.push("is_inbox = 1", "status = 'open'");
   } else if (view === "today") {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     // A recurring task made via "Starts" (no due_date set) is genuinely due today by its
     // recurrence pattern even though due_date/scheduled_at/start_date are all null — matched
     // separately below via the same per-day expansion Calendar.tsx uses, since that can't be
     // expressed as a single SQL comparison the way a plain due_date can.
-    clauses.push("status = 'open'", "(due_date <= ? OR scheduled_at LIKE ? OR start_date <= ?)");
-    params.push(today, `${today}%`, today);
+    clauses.push("status = 'open'", `(due_date <= ? OR ${localDaySql("scheduled_at")} = ? OR start_date <= ?)`);
+    params.push(today, today, today);
   } else if (view === "upcoming") {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     clauses.push("status = 'open'", "due_date IS NOT NULL", "due_date > ?");
     params.push(today);
   } else if (view === "project" && projectId) {
@@ -99,7 +100,7 @@ tasksRouter.get("/", (req, res) => {
   const rows = db.prepare(`SELECT * FROM tasks ${where} ORDER BY order_index ASC, created_at ASC`).all(...params) as any[];
 
   if (view === "today") {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const seenIds = new Set(rows.map((r) => r.id));
     const recurringCandidates = db
       .prepare(
@@ -157,7 +158,7 @@ tasksRouter.get("/check-duplicate", (req, res) => {
 // POST /api/tasks/auto-schedule { date } — slots today's un-timed open tasks sequentially
 // into working hours based on estimate_minutes (falls back to 30m when unset).
 tasksRouter.post("/auto-schedule", (req, res) => {
-  const date = (req.body?.date as string) ?? new Date().toISOString().slice(0, 10);
+  const date = (req.body?.date as string) ?? localToday();
   const startHM = getSetting("workingHoursStart", "09:00") as string;
   const endHM = getSetting("workingHoursEnd", "17:00") as string;
 
@@ -341,13 +342,9 @@ tasksRouter.patch("/:id", (req, res) => {
 
 tasksRouter.post("/:id/snooze", (req, res) => {
   const preset = (req.body?.preset as string) ?? "tomorrow";
-  const now = new Date();
-  const d = new Date();
-  if (preset === "tomorrow") d.setDate(now.getDate() + 1);
-  else if (preset === "in3days") d.setDate(now.getDate() + 3);
-  else if (preset === "nextWeek") d.setDate(now.getDate() + 7);
-  else if (preset === "nextMonth") d.setMonth(now.getMonth() + 1);
-  const dueDate = d.toISOString().slice(0, 10);
+  const from = localToday();
+  const dueDate =
+    preset === "in3days" ? addDays(from, 3) : preset === "nextWeek" ? addDays(from, 7) : preset === "nextMonth" ? addMonths(from, 1) : addDays(from, 1);
   db.prepare("UPDATE tasks SET due_date = ?, updated_at = ? WHERE id = ?").run(dueDate, new Date().toISOString(), req.params.id);
   res.json(hydrate(db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id)));
 });

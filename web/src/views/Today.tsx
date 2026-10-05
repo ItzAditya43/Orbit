@@ -11,6 +11,7 @@ import { useQuickAddStore } from "../quickAddStore";
 import { useToastStore } from "../toastStore";
 import { Link } from "react-router-dom";
 import { TagFilterDropdown, matchesTag } from "../components/TagFilterDropdown";
+import { dayOf, todayISO } from "../dates";
 
 const PRIORITY_RANK: Record<string, number> = { none: 0, low: 1, medium: 2, high: 3, urgent: 4 };
 
@@ -49,7 +50,7 @@ export default function Today() {
   };
 
   const onAdd = async (title: string) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     await api.tasks.create({ title, dueDate: today });
     invalidate();
   };
@@ -69,7 +70,7 @@ export default function Today() {
     toast(`"${task.title}" deleted`);
   };
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayISO();
   // The "today" view only ever returns open tasks, so what's been finished today has to be
   // fetched separately — without it "Completed" sat at 0 and the progress bar never moved.
   const { data: doneTasks = [] } = useQuery({
@@ -77,12 +78,16 @@ export default function Today() {
     queryFn: () => api.tasks.list({ status: "done" }),
   });
   const open = tasks.filter((t) => t.status !== "done" && matchesTag(t, tagFilter));
-  const done = doneTasks.filter((t) => (t.completed_at ?? "").slice(0, 10) === todayStr && matchesTag(t, tagFilter));
+  const done = doneTasks.filter((t) => dayOf(t.completed_at) === todayStr && matchesTag(t, tagFilter));
   const total = open.length + done.length;
   const pct = total > 0 ? Math.round((done.length / total) * 100) : 0;
 
-  const focusToday = focusSessions.filter((s: any) => s.was_completed && (s.started_at ?? "").slice(0, 10) === todayStr);
-  const focusMinutes = focusToday.reduce((sum: number, s: any) => sum + (s.planned_minutes ?? 25), 0);
+  const focusToday = focusSessions.filter((s: any) => s.was_completed && dayOf(s.started_at) === todayStr);
+  // Time actually spent, not the planned length — a 25-minute session ended after 10 is 10
+  // minutes of focus, and this now agrees with what Review reports for the same day.
+  const focusMinutes = Math.round(
+    focusToday.reduce((sum: number, s: any) => sum + (s.ended_at ? (new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 60000 : 0), 0)
+  );
 
   const { data: checkin } = useQuery({ queryKey: ["checkins", "today"], queryFn: api.checkins.today });
 

@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { db } from "../db.js";
+import { staleAreas, STALE_AREA_DAYS } from "./boundaries.js";
+import { addDays, localDay, localToday } from "../dates.js";
 
 export const reviewRouter = Router();
 
 reviewRouter.get("/daily", (_req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
-  const completed = db.prepare("SELECT id, title FROM tasks WHERE deleted_at IS NULL AND substr(completed_at, 1, 10) = ?").all(today);
+  const today = localToday();
+  const completed = db.prepare("SELECT id, title FROM tasks WHERE deleted_at IS NULL AND date(completed_at, 'localtime') = ?").all(today);
   const carriedOver = db
     .prepare("SELECT id, title, due_date FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < ?")
     .all(today);
@@ -14,7 +16,7 @@ reviewRouter.get("/daily", (_req, res) => {
     db
       .prepare(
         `SELECT COALESCE(SUM((julianday(COALESCE(ended_at, started_at)) - julianday(started_at)) * 1440), 0) AS m
-         FROM focus_sessions WHERE was_completed = 1 AND substr(started_at, 1, 10) = ?`
+         FROM focus_sessions WHERE was_completed = 1 AND date(started_at, 'localtime') = ?`
       )
       .get(today) as any
   ).m;
@@ -28,7 +30,7 @@ reviewRouter.get("/daily", (_req, res) => {
       h.frequency === "custom_days"
         ? (h.custom_days ? JSON.parse(h.custom_days) : []).includes(todayWeekday)
         : h.frequency === "interval" && h.interval_days
-          ? Math.round((new Date(`${today}T00:00:00Z`).getTime() - new Date(`${h.created_at.slice(0, 10)}T00:00:00Z`).getTime()) / 86400000) % h.interval_days === 0
+          ? Math.round((new Date(`${today}T00:00:00Z`).getTime() - new Date(`${localDay(h.created_at)}T00:00:00Z`).getTime()) / 86400000) % h.interval_days === 0
           : true;
     if (!dueToday) return false;
     const log = db.prepare("SELECT amount FROM habit_logs WHERE habit_id = ? AND date = ?").get(h.id, today) as any;
@@ -57,13 +59,14 @@ reviewRouter.get("/daily", (_req, res) => {
 
 reviewRouter.get("/weekly", (_req, res) => {
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  const today = localToday();
   const completed = db
     .prepare("SELECT id, title, completed_at FROM tasks WHERE deleted_at IS NULL AND completed_at >= ? ORDER BY completed_at DESC")
     .all(weekAgo);
   const created = (db.prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND created_at >= ?").get(weekAgo) as any).c;
   const stillOpen = db
     .prepare(
-      "SELECT id, title, due_date FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < date('now') ORDER BY due_date ASC"
+      "SELECT id, title, due_date FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date < date('now', 'localtime') ORDER BY due_date ASC"
     )
     .all();
   const focusMinutes = (
@@ -88,19 +91,33 @@ reviewRouter.get("/weekly", (_req, res) => {
     db.prepare("SELECT id, title FROM habits WHERE archived = 0").all() as { id: string; title: string }[]
   ).map((h) => {
     const daysLogged = (
-      db.prepare("SELECT COUNT(DISTINCT date) c FROM habit_logs WHERE habit_id = ? AND date >= ?").get(h.id, weekAgo.slice(0, 10)) as any
+      db.prepare("SELECT COUNT(DISTINCT date) c FROM habit_logs WHERE habit_id = ? AND date >= ?").get(h.id, addDays(today, -7)) as any
     ).c;
     return { id: h.id, title: h.title, daysLogged };
   });
   const habitsNeglected = habitWeekStats.filter((h) => h.daysLogged === 0);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = today;
   const goalsStalled = (
     db.prepare("SELECT id, title, target_date, progress FROM goals WHERE status = 'active'").all() as any[]
   ).filter((g) => g.target_date && g.target_date < todayStr && (g.progress ?? 0) < 1);
 
+  // Priority areas linked to a project that have had no activity for three weeks, and parked
+  // ideas whose revisit date has come — both are "decide again" prompts, not failures.
+  const quietAreas = staleAreas();
+  const ideasToRevisit = db
+    .prepare(
+      `SELECT id, label, status, revisit_at, created_at FROM scope_review_items
+       WHERE status IN ('pending', 'parked') AND COALESCE(revisit_at, date(created_at, 'localtime', '+14 days')) <= ?
+       ORDER BY created_at ASC`
+    )
+    .all(today);
+
   res.json({
-    weekStart: weekAgo.slice(0, 10),
+    staleAreas: quietAreas,
+    staleAreaDays: STALE_AREA_DAYS,
+    ideasToRevisit,
+    weekStart: addDays(today, -7),
     completed,
     createdCount: created,
     stillOpen,

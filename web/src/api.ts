@@ -5,10 +5,13 @@ const BASE = "http://localhost:4310/api";
 export class ApiError extends Error {
   isConnectionError: boolean;
   status?: number;
-  constructor(message: string, opts: { isConnectionError: boolean; status?: number }) {
+  // The parsed JSON error body, when there was one — some errors carry more than a message.
+  data?: any;
+  constructor(message: string, opts: { isConnectionError: boolean; status?: number; data?: any }) {
     super(message);
     this.isConnectionError = opts.isConnectionError;
     this.status = opts.status;
+    this.data = opts.data;
   }
 }
 
@@ -64,6 +67,38 @@ export interface Task {
   subtasks?: Task[];
 }
 
+export interface BoundarySection {
+  id: string;
+  name: string;
+  color: string | null;
+  max_active: number | null;
+  is_restricted: number;
+  order_index: number;
+  active_count: number;
+}
+
+export interface ScopeCheck {
+  inScope: boolean;
+  // Matched something in a section marked "avoiding" — a warning, never in scope.
+  restricted: boolean;
+  matchedBoundaries: any[];
+  restrictedBoundaries: any[];
+  via: "match" | "ai" | "none";
+  reason?: string;
+}
+
+export interface AreaStats {
+  id: string;
+  name: string;
+  category: string;
+  projectId: string;
+  openTasks: number;
+  completedThisWeek: number;
+  minutesThisWeek: number;
+  lastActivityAt: string | null;
+  idleDays: number;
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -82,12 +117,14 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const body = await res.text();
     let message = body;
+    let data: any;
     try {
-      message = JSON.parse(body).error ?? body;
+      data = JSON.parse(body);
+      message = data.error ?? body;
     } catch {
       // body wasn't JSON — use as-is
     }
-    throw new ApiError(message || `Request failed (${res.status})`, { isConnectionError: false, status: res.status });
+    throw new ApiError(message || `Request failed (${res.status})`, { isConnectionError: false, status: res.status, data });
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -110,6 +147,9 @@ export const api = {
       estimateMinutes?: number;
       isInbox?: boolean;
       tagIds?: string[];
+      recurrence?: string;
+      recurrenceIntervalDays?: number;
+      recurrenceDays?: number[];
     }) => req<Task>(`/tasks`, { method: "POST", body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) =>
       req<Task>(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -207,19 +247,30 @@ export const api = {
   },
   boundaries: {
     list: (includeInactive?: boolean) => req<any[]>(`/boundaries${includeInactive ? "?includeInactive=true" : ""}`),
-    create: (body: { category: string; name: string; projectId?: string }) =>
+    // replaceId: when the section is at its limit, the item to drop to make room.
+    create: (body: { category: string; name: string; projectId?: string; replaceId?: string }) =>
       req<any>(`/boundaries`, { method: "POST", body: JSON.stringify(body) }),
-    update: (id: string, body: { name?: string; category?: string; isActive?: boolean; projectId?: string | null }) =>
+    update: (id: string, body: { name?: string; category?: string; isActive?: boolean; projectId?: string | null; replaceId?: string }) =>
       req<any>(`/boundaries/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     remove: (id: string) => req<void>(`/boundaries/${id}`, { method: "DELETE" }),
     purge: (id: string) => req<void>(`/boundaries/${id}?permanent=true`, { method: "DELETE" }),
-    check: (label: string) => req<any>(`/boundaries/check`, { method: "POST", body: JSON.stringify({ label }) }),
+    check: (label: string) => req<ScopeCheck>(`/boundaries/check`, { method: "POST", body: JSON.stringify({ label }) }),
+    stats: () => req<AreaStats[]>(`/boundaries/stats`),
+    sections: {
+      list: () => req<BoundarySection[]>(`/boundaries/sections`),
+      create: (body: { name: string; color?: string | null; maxActive?: number | null; isRestricted?: boolean }) =>
+        req<BoundarySection>(`/boundaries/sections`, { method: "POST", body: JSON.stringify(body) }),
+      update: (id: string, body: { name?: string; color?: string | null; maxActive?: number | null; isRestricted?: boolean }) =>
+        req<BoundarySection>(`/boundaries/sections/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+      reorder: (ids: string[]) => req<BoundarySection[]>(`/boundaries/sections/reorder`, { method: "POST", body: JSON.stringify({ ids }) }),
+      remove: (id: string) => req<void>(`/boundaries/sections/${id}`, { method: "DELETE" }),
+    },
   },
   scopeReview: {
     list: () => req<any[]>(`/scope-review`),
-    create: (body: { label: string; kind: string }) =>
+    create: (body: { label: string; kind: string; revisitAt?: string | null }) =>
       req<any>(`/scope-review`, { method: "POST", body: JSON.stringify(body) }),
-    update: (id: string, body: { status?: string; reason?: string }) =>
+    update: (id: string, body: { status?: string; reason?: string; revisitAt?: string | null }) =>
       req<any>(`/scope-review/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     remove: (id: string) => req<void>(`/scope-review/${id}`, { method: "DELETE" }),
   },
@@ -280,6 +331,8 @@ export const api = {
     list: () => req<any[]>(`/automations`),
     create: (body: { name: string; triggerType: string; actionType: string; config?: Record<string, unknown> }) =>
       req<any>(`/automations`, { method: "POST", body: JSON.stringify(body) }),
+    update: (id: string, body: { name?: string; triggerType?: string; actionType?: string; config?: Record<string, unknown> }) =>
+      req<any>(`/automations/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     setEnabled: (id: string, isEnabled: boolean) =>
       req<any>(`/automations/${id}`, { method: "PATCH", body: JSON.stringify({ isEnabled }) }),
     remove: (id: string) => req<void>(`/automations/${id}`, { method: "DELETE" }),
@@ -322,6 +375,8 @@ export const api = {
   },
   sync: {
     backups: () => req<{ name: string; sizeBytes: number; createdAt: string }[]>(`/sync/backups`),
+    restoreBackup: (name: string) =>
+      req<{ ok: boolean; exportedAt: string | null; counts: Record<string, number> }>(`/sync/backups/${encodeURIComponent(name)}/restore`, { method: "POST" }),
     exportEncrypted: (passphrase: string) => req<any>(`/sync/export-encrypted`, { method: "POST", body: JSON.stringify({ passphrase }) }),
     importEncrypted: (body: { passphrase: string; salt: string; iv: string; authTag: string; ciphertext: string }) =>
       req<any>(`/sync/import-encrypted`, { method: "POST", body: JSON.stringify(body) }),

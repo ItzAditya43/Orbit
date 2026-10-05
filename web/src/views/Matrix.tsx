@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api, type Task } from "../api";
+import { daysFromToday, todayISO } from "../dates";
 
 // Classification is derived from real fields (priority/due-date for tasks, horizon/target-date
 // for goals), not a separate flag — dragging an item into a quadrant writes back the field
@@ -8,7 +9,7 @@ import { api, type Task } from "../api";
 // everywhere else in the app, not a parallel system that can drift out of sync.
 function isTaskUrgent(t: Task) {
   if (!t.due_date) return false;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   return t.due_date <= today;
 }
 function isTaskImportant(t: Task) {
@@ -17,7 +18,7 @@ function isTaskImportant(t: Task) {
 const LONG_HORIZONS = new Set(["life", "annual", "semester"]);
 function isGoalUrgent(g: any) {
   if (!g.target_date) return false;
-  const in7Days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const in7Days = daysFromToday(7);
   return g.target_date <= in7Days;
 }
 function isGoalImportant(g: any) {
@@ -44,12 +45,12 @@ export default function Matrix() {
   const bucketGoals = (urgent: boolean, important: boolean) => goals.filter((g: any) => isGoalUrgent(g) === urgent && isGoalImportant(g) === important);
 
   const applyTaskQuadrant = async (taskId: string, urgent: boolean, important: boolean) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     await api.tasks.update(taskId, { priority: important ? "high" : "none", dueDate: urgent ? today : null });
     invalidate();
   };
   const applyGoalQuadrant = async (goalId: string, urgent: boolean, important: boolean) => {
-    const in3Days = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+    const in3Days = daysFromToday(3);
     await api.goals.update(goalId, { horizon: important ? "annual" : "monthly", targetDate: urgent ? in3Days : null });
     invalidate();
   };

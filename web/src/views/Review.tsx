@@ -134,6 +134,36 @@ export default function Review() {
                   </Link>
                 </div>
               )}
+              {(weekly.staleAreas ?? []).length > 0 && (
+                <div className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">Still a priority?</p>
+                    <Link to="/boundaries" className="text-xs font-medium text-amber-700 dark:text-amber-400 hover:underline shrink-0 ml-3">
+                      Priority →
+                    </Link>
+                  </div>
+                  {weekly.staleAreas.map((a: any) => (
+                    <p key={a.id} className="text-sm text-amber-700 dark:text-amber-400">
+                      {a.name} <span className="opacity-70">({a.category})</span> — nothing for {a.idleDays} days
+                    </p>
+                  ))}
+                </div>
+              )}
+              {(weekly.ideasToRevisit ?? []).length > 0 && (
+                <div className="rounded-xl border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30 p-4 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-violet-700 dark:text-violet-400">Parked ideas due for a decision</p>
+                    <Link to="/boundaries" className="text-xs font-medium text-violet-700 dark:text-violet-400 hover:underline shrink-0 ml-3">
+                      Decide →
+                    </Link>
+                  </div>
+                  {weekly.ideasToRevisit.map((i: any) => (
+                    <p key={i.id} className="text-sm text-violet-700 dark:text-violet-400">
+                      {i.label}
+                    </p>
+                  ))}
+                </div>
+              )}
               <List title="Completed this week" items={weekly.completed} />
               <TaskList title="Still overdue" items={weekly.stillOpen} onComplete={completeTask} onSnooze={snoozeTask} />
               <HabitList title="Habits untouched all week" items={weekly.habitsNeglected} onLog={logHabit} />

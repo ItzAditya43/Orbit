@@ -17,6 +17,29 @@ export default function Automations() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["automations"] });
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Loads an existing automation back into the form above; saving then updates it in place.
+  const startEdit = (a: any) => {
+    let config: any = {};
+    try {
+      config = JSON.parse(a.config_json || "{}");
+    } catch {
+      // unreadable config — edit starts from a blank value
+    }
+    setEditingId(a.id);
+    setName(a.name);
+    setTriggerType(a.trigger_type);
+    setActionType(a.action_type);
+    setMessage(String(config.message ?? config.title ?? config.url ?? config.prompt ?? config.offsetDays ?? ""));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setName("");
+    setMessage("");
+  };
+
   const create = async () => {
     if (!name.trim()) return;
     const config =
@@ -31,7 +54,9 @@ export default function Automations() {
               : actionType === "run_ai_workflow"
                 ? { prompt: message }
                 : {};
-    await api.automations.create({ name: name.trim(), triggerType, actionType, config });
+    if (editingId) await api.automations.update(editingId, { name: name.trim(), triggerType, actionType, config });
+    else await api.automations.create({ name: name.trim(), triggerType, actionType, config });
+    setEditingId(null);
     setName("");
     setMessage("");
     invalidate();
@@ -88,13 +113,27 @@ export default function Automations() {
             className="w-full rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3 py-2 text-sm"
           />
         )}
-        <button className="px-3 py-2 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm">Create automation</button>
+        <div className="flex items-center gap-2">
+          <button className="px-3 py-2 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm">
+            {editingId ? "Save changes" : "Create automation"}
+          </button>
+          {editingId && (
+            <button type="button" onClick={cancelEdit} className="px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 text-sm">
+              Cancel
+            </button>
+          )}
+        </div>
       </form>
 
       {isLoading && <p className="text-sm text-neutral-400">Loading...</p>}
       <div className="space-y-2">
         {automations.map((a: any) => (
-          <div key={a.id} className="flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 text-sm">
+          <div
+            key={a.id}
+            className={`flex items-center justify-between rounded-lg border p-3 text-sm ${
+              editingId === a.id ? "border-neutral-900 dark:border-white" : "border-neutral-200 dark:border-neutral-800"
+            }`}
+          >
             <div>
               <p className="font-medium">{a.name}</p>
               <p className="text-xs text-neutral-400">
@@ -111,8 +150,12 @@ export default function Automations() {
               >
                 {a.is_enabled ? "enabled" : "disabled"}
               </button>
+              <button onClick={() => startEdit(a)} className="text-xs text-neutral-400 hover:underline">
+                edit
+              </button>
               <button
                 onClick={async () => {
+                  if (editingId === a.id) cancelEdit();
                   await api.automations.remove(a.id);
                   invalidate();
                 }}

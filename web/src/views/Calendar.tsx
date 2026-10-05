@@ -5,6 +5,7 @@ import { api } from "../api";
 import { CalendarEventModal } from "../components/CalendarEventModal";
 import { EmptyState } from "../components/EmptyState";
 import { CalendarOffIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "../icons";
+import { dayOf } from "../dates";
 
 type ViewMode = "month" | "week" | "timeline" | "agenda";
 
@@ -29,6 +30,43 @@ function key(d: Date) {
   // no timezone) by one day — an event dated the 23rd would land under the cell labeled 24th.
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+// Positions a day's timed items for the Timeline view. Items whose time ranges overlap are
+// placed side by side in columns instead of stacked on top of each other, where the later one
+// simply hid the earlier one.
+function layoutTimeline(items: any[]) {
+  const HOUR_PX = 48;
+  const boxes = items
+    .map((e) => {
+      const start = new Date(e.starts_at);
+      const end = e.ends_at ? new Date(e.ends_at) : new Date(start.getTime() + 30 * 60000);
+      const top = (start.getHours() + start.getMinutes() / 60) * HOUR_PX;
+      const height = Math.max(16, ((end.getTime() - start.getTime()) / 3600000) * HOUR_PX);
+      return { e, start, top, height, column: 0, columns: 1 };
+    })
+    .sort((a, b) => a.top - b.top || b.height - a.height);
+
+  // Walk in start order, grouping runs of mutually-overlapping boxes; each box takes the first
+  // column whose previous occupant has already ended, and the whole group shares one width.
+  let group: typeof boxes = [];
+  let groupBottom = -1;
+  const columnBottoms: number[] = [];
+  const closeGroup = () => {
+    for (const b of group) b.columns = columnBottoms.length;
+    group = [];
+    columnBottoms.length = 0;
+  };
+  for (const box of boxes) {
+    if (group.length && box.top >= groupBottom) closeGroup();
+    let column = columnBottoms.findIndex((bottom) => bottom <= box.top);
+    if (column === -1) column = columnBottoms.length;
+    columnBottoms[column] = box.top + box.height;
+    box.column = column;
+    group.push(box);
+    groupBottom = Math.max(groupBottom, box.top + box.height);
+  }
+  closeGroup();
+  return boxes;
 }
 function isSameMonth(a: Date, b: Date) {
   return a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
@@ -66,7 +104,7 @@ export default function Calendar() {
     const map = new Map<string, any[]>();
     for (const e of events) {
       if (!showHabits && e.source === "habit") continue;
-      const d = (e.starts_at ?? "").slice(0, 10);
+      const d = dayOf(e.starts_at);
       if (!map.has(d)) map.set(d, []);
       map.get(d)!.push(e);
     }
@@ -102,11 +140,16 @@ export default function Calendar() {
     } else if (e.source === "goal") {
       await api.goals.update(e.goal_id, { targetDate: newDay });
     } else if (e.source === "event") {
-      const startTime = e.starts_at?.slice(11, 16) ?? "00:00";
-      const endTime = e.ends_at?.slice(11, 16) ?? startTime;
+      // Same local clock time on the new day, same duration. Reading HH:MM straight out of
+      // the stored string doesn't work — it's a UTC timestamp, so that's the UTC clock time,
+      // and re-applying it as local time shifted the event by the timezone offset on every drag.
+      const oldStart = new Date(e.starts_at);
+      const oldEnd = new Date(e.ends_at ?? e.starts_at);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const newStart = new Date(`${newDay}T${pad(oldStart.getHours())}:${pad(oldStart.getMinutes())}:00`);
       const body = {
-        startsAt: new Date(`${newDay}T${startTime}:00`).toISOString(),
-        endsAt: new Date(`${newDay}T${endTime}:00`).toISOString(),
+        startsAt: newStart.toISOString(),
+        endsAt: new Date(newStart.getTime() + Math.max(0, oldEnd.getTime() - oldStart.getTime())).toISOString(),
       };
       if (duplicate) {
         await api.calendar.create({ title: e.title, allDay: !!e.all_day, color: e.color ?? undefined, ...body });
@@ -415,11 +458,7 @@ export default function Calendar() {
                   {Array.from({ length: 24 }, (_, hour) => (
                     <div key={hour} className="h-12 border-b border-neutral-100 dark:border-neutral-900" />
                   ))}
-                  {dayItems.map((e: any) => {
-                    const start = new Date(e.starts_at);
-                    const end = e.ends_at ? new Date(e.ends_at) : new Date(start.getTime() + 30 * 60000);
-                    const top = (start.getHours() + start.getMinutes() / 60) * 48;
-                    const height = Math.max(16, ((end.getTime() - start.getTime()) / 3600000) * 48);
+                  {layoutTimeline(dayItems).map(({ e, start, top, height, column, columns }) => {
                     return (
                       <button
                         key={e.id}
@@ -430,8 +469,14 @@ export default function Calendar() {
                           ev.preventDefault();
                           setContextMenu({ e, x: ev.clientX, y: ev.clientY });
                         }}
-                        style={{ top, height, background: eventColor(e) }}
-                        className={`absolute left-0.5 right-0.5 rounded-md px-1 py-0.5 text-left text-[10px] text-white overflow-hidden ${canDrag(e) ? "cursor-grab active:cursor-grabbing" : ""}`}
+                        style={{
+                          top,
+                          height,
+                          left: `calc(${(column / columns) * 100}% + 2px)`,
+                          width: `calc(${100 / columns}% - 4px)`,
+                          background: eventColor(e),
+                        }}
+                        className={`absolute rounded-md px-1 py-0.5 text-left text-[10px] text-white overflow-hidden ${canDrag(e) ? "cursor-grab active:cursor-grabbing" : ""}`}
                         title={`${e.title} — ${start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`}
                       >
                         {e.title}

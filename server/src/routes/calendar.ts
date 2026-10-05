@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
+import { localDay, localDaySql } from "../dates.js";
 
 export const calendarRouter = Router();
 
@@ -10,10 +11,15 @@ calendarRouter.get("/", (req, res) => {
   // A bare YYYY-MM-DD `to` means "through the end of that day" — compared as-is it sorts before
   // every timed entry on that date and silently dropped the range's whole last day.
   const to = toParam && toParam.length === 10 ? `${toParam}T23:59:59.999Z` : toParam;
+  // Ranges are whole local days. Event and scheduled-task times are stored as timestamps, so
+  // they're reduced to their local day before comparing — matching raw strings put an early-
+  // morning event on the previous day's side of the range in any timezone ahead of UTC.
+  const fromDay = from?.slice(0, 10);
+  const toDay = to?.slice(0, 10);
   const clauses: string[] = [];
   const params: unknown[] = [];
-  if (from) { clauses.push("e.starts_at >= ?"); params.push(from); }
-  if (to) { clauses.push("e.starts_at <= ?"); params.push(to); }
+  if (fromDay) { clauses.push(`${localDaySql("e.starts_at")} >= ?`); params.push(fromDay); }
+  if (toDay) { clauses.push(`${localDaySql("e.starts_at")} <= ?`); params.push(toDay); }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const events = db
     .prepare(
@@ -29,8 +35,8 @@ calendarRouter.get("/", (req, res) => {
   // was pure metadata that never showed up anywhere until you completed the task.
   const taskClauses = ["t.status != 'done'", "t.deleted_at IS NULL", "(t.scheduled_at IS NOT NULL OR t.due_date IS NOT NULL)"];
   const taskParams: unknown[] = [];
-  if (from) { taskClauses.push("(scheduled_at >= ? OR due_date >= ?)"); taskParams.push(from, from); }
-  if (to) { taskClauses.push("(scheduled_at <= ? OR due_date <= ?)"); taskParams.push(to, to); }
+  if (fromDay) { taskClauses.push(`(${localDaySql("t.scheduled_at")} >= ? OR t.due_date >= ?)`); taskParams.push(fromDay, fromDay); }
+  if (toDay) { taskClauses.push(`(${localDaySql("t.scheduled_at")} <= ? OR t.due_date <= ?)`); taskParams.push(toDay, toDay); }
   const scheduledTasks = db
     .prepare(
       `SELECT t.id, t.title, t.scheduled_at, t.due_date, t.priority, t.project_id, p.color AS project_color
@@ -111,7 +117,7 @@ calendarRouter.get("/", (req, res) => {
     const rangeEndIso = to.slice(0, 10);
     for (const h of habits) {
       const customDays: number[] | null = h.custom_days ? JSON.parse(h.custom_days) : null;
-      const createdDate = h.created_at.slice(0, 10);
+      const createdDate = localDay(h.created_at);
       for (let d = new Date(`${rangeStartIso}T00:00:00Z`); d.toISOString().slice(0, 10) <= rangeEndIso; d.setUTCDate(d.getUTCDate() + 1)) {
         const iso = d.toISOString().slice(0, 10);
         if (iso < createdDate) continue;
@@ -139,8 +145,8 @@ calendarRouter.get("/", (req, res) => {
   // Goals with a target date get a single pseudo-event on that date.
   const goalClauses = ["status != 'abandoned'", "target_date IS NOT NULL"];
   const goalParams: unknown[] = [];
-  if (from) { goalClauses.push("target_date >= ?"); goalParams.push(from); }
-  if (to) { goalClauses.push("target_date <= ?"); goalParams.push(to); }
+  if (fromDay) { goalClauses.push("target_date >= ?"); goalParams.push(fromDay); }
+  if (toDay) { goalClauses.push("target_date <= ?"); goalParams.push(toDay); }
   const goals = db.prepare(`SELECT id, title, target_date FROM goals WHERE ${goalClauses.join(" AND ")}`).all(...goalParams) as any[];
   const goalEvents = goals.map((g) => ({
     id: `goal-${g.id}`,

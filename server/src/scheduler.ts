@@ -3,6 +3,7 @@ import path from "node:path";
 import { db } from "./db.js";
 import { fireTrigger } from "./automationEngine.js";
 import { dataDir } from "./dataDir.js";
+import { localToday } from "./dates.js";
 
 export const backupsDir = path.join(dataDir, "backups");
 
@@ -13,7 +14,7 @@ export const backupsDir = path.join(dataDir, "backups");
 export const BACKUP_TABLES = [
   "projects", "tags", "tasks", "task_tags", "task_dependencies", "calendar_events",
   "goals", "goal_milestones", "goal_tags", "habits", "habit_tags", "habit_logs",
-  "notes", "daily_checkins", "boundaries", "scope_review_items", "time_entries", "focus_sessions",
+  "notes", "daily_checkins", "boundary_sections", "boundaries", "scope_review_items", "time_entries", "focus_sessions",
   "task_templates", "saved_filters", "automations", "attachments", "boards", "paired_devices",
 ];
 
@@ -38,7 +39,7 @@ function setSetting(key: string, value: unknown) {
 // per task per day. There's no OS-level cron here — this is a plain in-process interval
 // that only runs while the server is up, which is the honest local-only equivalent.
 async function tick() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
 
   const lastDailyStart = getSetting("_lastDailyStartDate", null);
   if (lastDailyStart !== today) {
@@ -62,7 +63,7 @@ async function tick() {
 
 function runScheduledBackup() {
   if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const lastBackup = getSetting("_lastBackupDate", null);
   if (lastBackup === today) return;
 

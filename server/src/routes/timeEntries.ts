@@ -2,6 +2,7 @@ import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
 
+
 export const timeEntriesRouter = Router();
 
 timeEntriesRouter.get("/", (req, res) => {
@@ -61,7 +62,7 @@ timeEntriesRouter.get("/summary", (req, res) => {
   const from = new Date(Date.now() - days * 86400000).toISOString();
   const rows = db
     .prepare(
-      `SELECT substr(started_at, 1, 10) AS day, SUM(COALESCE(duration_seconds, 0)) AS seconds
+      `SELECT date(started_at, 'localtime') AS day, SUM(COALESCE(duration_seconds, 0)) AS seconds
        FROM time_entries WHERE started_at >= ? GROUP BY day ORDER BY day ASC`
     )
     .all(from);

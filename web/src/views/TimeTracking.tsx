@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { DateField } from "../components/DateField";
 import { TimeField } from "../components/TimeField";
+import { dayOf, todayISO } from "../dates";
 
 function splitLocal(iso: string) {
   const d = new Date(iso);
@@ -93,7 +94,7 @@ export default function TimeTracking() {
   };
 
   const totalToday = entries
-    .filter((e: any) => (e.started_at ?? "").slice(0, 10) === new Date().toISOString().slice(0, 10))
+    .filter((e: any) => dayOf(e.started_at) === todayISO())
     .reduce((sum: number, e: any) => sum + (e.duration_seconds ?? 0), 0);
 
   const maxDaySeconds = Math.max(1, ...(summary?.days ?? []).map((d: any) => d.seconds));

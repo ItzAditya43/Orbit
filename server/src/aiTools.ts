@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./db.js";
 import { markTaskDone } from "./taskCompletion.js";
+import { localToday } from "./dates.js";
 
 // The internal AI tool registry (§17/§18 of the spec). Every tool is a plain deterministic
 // function — this is the layer an LLM (local Ollama, or any OpenAI-compatible endpoint) calls
@@ -32,7 +33,7 @@ export const tools = {
     return db.prepare("SELECT * FROM tasks WHERE id = ?").get(args.taskId);
   },
   get_today() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     return db
       .prepare(`SELECT * FROM tasks WHERE status = 'open' AND (due_date <= ? OR scheduled_at LIKE ?) AND parent_id IS NULL`)
       .all(today, `${today}%`);
@@ -46,7 +47,7 @@ export const tools = {
   },
   get_available_time(args: { date?: string } = {}) {
     // Deterministic estimate: 8h working day minus estimate_minutes of tasks scheduled that day.
-    const date = args.date ?? new Date().toISOString().slice(0, 10);
+    const date = args.date ?? localToday();
     const scheduled = db
       .prepare(`SELECT COALESCE(SUM(estimate_minutes), 0) AS m FROM tasks WHERE status = 'open' AND (due_date = ? OR scheduled_at LIKE ?)`)
       .get(date, `${date}%`) as any;
@@ -115,7 +116,7 @@ export const tools = {
       .all();
   },
   get_analytics_summary() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const totalOpen = (db.prepare("SELECT COUNT(*) c FROM tasks WHERE deleted_at IS NULL AND status = 'open'").get() as any).c;
     const overdue = (
       db

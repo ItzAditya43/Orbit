@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./db.js";
+import { addDays, localToday } from "./dates.js";
 import { handleAiText } from "./routes/ai.js";
 
 interface TriggerContext {
@@ -65,13 +66,7 @@ async function runAction(actionType: string, config: any, ctx: TriggerContext) {
     }
   } else if (actionType === "reschedule" && ctx.taskId) {
     const offsetDays = Number(config.offsetDays ?? 1);
-    const next = new Date();
-    next.setDate(next.getDate() + offsetDays);
-    db.prepare("UPDATE tasks SET due_date = ?, updated_at = ? WHERE id = ?").run(
-      next.toISOString().slice(0, 10),
-      now,
-      ctx.taskId
-    );
+    db.prepare("UPDATE tasks SET due_date = ?, updated_at = ? WHERE id = ?").run(addDays(localToday(), offsetDays), now, ctx.taskId);
   } else if (actionType === "start_timer" && ctx.taskId) {
     db.prepare("INSERT INTO time_entries (id, task_id, started_at) VALUES (?,?,?)").run(randomUUID(), ctx.taskId, now);
   } else if (actionType === "run_ai_workflow") {

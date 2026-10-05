@@ -172,10 +172,23 @@ in Analytics.
 
 **Notes**: markdown-capable notes, linkable to a project or task.
 
-**Rigid (attention boundaries)**: define active boundaries by category (main/hobby/game/
-restricted), check whether a new idea/project falls in scope, park out-of-scope ideas into a
-scope-review queue. Matching is simple substring-based, not AI-classified — a real "is this
-in scope" judgment call would need the AI operator wired into this flow, which it isn't yet.
+**Priority (attention boundaries)**: group the things you're committed to into sections
+(reorderable, coloured, renameable, can be empty). A section can carry a limit ("at most 3
+active") — adding past it asks which existing item makes way — or be marked as *avoiding*, in
+which case a match is a warning rather than "in scope". Check a new idea against your areas
+and park out-of-scope ones with a revisit date. Matching is word-based first; if that finds
+nothing and an Ollama Cloud key is saved, the free cloud tier is asked whether the idea is an
+instance of one of your areas (never a local model, and only the idea plus your area names are
+sent). Areas linked to a project show open tasks, completions and time for the last 7 days;
+ones with no activity for 3 weeks, and parked ideas whose date has come, surface in the weekly
+Review.
+
+**Quick add syntax**: `Prep slides #"Interview Prep" @work !high next tuesday`, or
+`Water plants every 3 days` — `#project`, `@tag` (quote multi-word names), `!low|medium|high|urgent`,
+a date phrase, and a repeat (`every day/week/month`, `every N days`, `every monday`,
+`every mon wed fri`, `every weekday`). Parsed locally; a preview shows what was understood.
+
+**Dates** follow the system timezone — "today" is the date on this machine's clock.
 
 **AI operator**: an internal tool registry (`server/src/aiTools.ts` — create/complete/move/
 schedule tasks, get today/available-time, capture ideas, start focus sessions) callable by a

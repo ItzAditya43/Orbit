@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { api } from "../api";
 import { useToastStore } from "../toastStore";
 import { TimeField } from "../components/TimeField";
+import { todayISO } from "../dates";
 
 function DevicesSection() {
   const qc = useQueryClient();
@@ -129,6 +130,19 @@ function AiProviderSection({ local, save }: { local: any; save: (patch: Record<s
           placeholder={provider === "cloud" ? "gpt-oss:20b-cloud" : "llama3.2:1b"}
           className="mt-1 w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-sm"
         />
+      </label>
+      <label className="flex items-start gap-2 text-xs text-neutral-400">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={local.aiScopeCheck !== false}
+          onChange={(e) => save({ aiScopeCheck: e.target.checked })}
+        />
+        <span>
+          Use AI for the Priority check when plain word matching finds nothing (e.g. knowing a game's name belongs under "games").
+          Only ever uses Ollama Cloud's free tier with the key above — never a local model — and sends just the idea and your
+          area names.
+        </span>
       </label>
       <div className="flex items-center gap-3">
         <button onClick={check} disabled={checking} className="text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -376,9 +390,27 @@ export default function Settings() {
         {backups.length > 0 && (
           <div className="space-y-1">
             {backups.slice(0, 5).map((b) => (
-              <div key={b.name} className="flex justify-between text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
+              <div key={b.name} className="flex items-center justify-between gap-3 text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
                 <span>{b.name}</span>
-                <span className="text-neutral-400">{Math.round(b.sizeBytes / 1024)} KB</span>
+                <span className="flex items-center gap-3">
+                  <span className="text-neutral-400">{Math.round(b.sizeBytes / 1024)} KB</span>
+                  <button
+                    onClick={async () => {
+                      const day = b.name.replace(/^backup-|\.json$/g, "");
+                      if (!confirm(`Restore the backup from ${day}?\n\nEverything in it goes back to how it was that day. Anything you've created since then is kept.`)) return;
+                      try {
+                        await api.sync.restoreBackup(b.name);
+                        qc.invalidateQueries();
+                        toast(`Restored backup from ${day}`);
+                      } catch (e) {
+                        toast(e instanceof Error ? e.message : "Restore failed");
+                      }
+                    }}
+                    className="text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:underline"
+                  >
+                    restore
+                  </button>
+                </span>
               </div>
             ))}
           </div>
@@ -401,7 +433,7 @@ export default function Settings() {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `orbit-backup-${new Date().toISOString().slice(0, 10)}.encrypted.json`;
+                a.download = `orbit-backup-${todayISO()}.encrypted.json`;
                 a.click();
                 URL.revokeObjectURL(url);
                 setExportPassphrase("");

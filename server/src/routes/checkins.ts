@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
+import { localToday } from "../dates.js";
 
 export const checkinsRouter = Router();
 
@@ -15,7 +16,7 @@ checkinsRouter.get("/", (req, res) => {
 });
 
 checkinsRouter.get("/today", (_req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   res.json(db.prepare("SELECT * FROM daily_checkins WHERE date = ?").get(today) ?? null);
 });
 

@@ -1,18 +1,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-
-function localISODate(d: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+import { dayOf, daysFromToday, todayISO } from "../dates";
 
 const QUADRANT_LABELS: Record<string, string> = { do: "Do first", schedule: "Schedule", delegate: "Quick / delegate", later: "Later" };
 
 export default function BoardDashboard() {
   const qc = useQueryClient();
-  const today = localISODate(new Date());
-  const tomorrow = localISODate(new Date(Date.now() + 86400000));
+  const today = todayISO();
+  const tomorrow = daysFromToday(1);
 
   const { data: tasks = [] } = useQuery({ queryKey: ["tasks", "status", "open"], queryFn: () => api.tasks.list({ status: "open" }) });
   const { data: notes = [] } = useQuery({ queryKey: ["notes"], queryFn: () => api.notes.list() });
@@ -20,7 +16,7 @@ export default function BoardDashboard() {
   const { data: boards = [] } = useQuery({ queryKey: ["boards", "all"], queryFn: () => api.boards.list() });
   const { data: analytics } = useQuery({
     queryKey: ["analytics", "board-snapshot"],
-    queryFn: () => api.analytics.summary({ from: localISODate(new Date(Date.now() - 13 * 86400000)), to: today }),
+    queryFn: () => api.analytics.summary({ from: daysFromToday(-13), to: today }),
   });
   // A task's stored due_date only advances when you complete it, so "due today/tomorrow" for a
   // recurring task (e.g. created via "Starts" with no due_date at all) can't be read off that
@@ -33,7 +29,7 @@ export default function BoardDashboard() {
     queryFn: () => api.calendar.list({ from: today, to: tomorrow }),
   });
   const taskIdsDueOn = (day: string) =>
-    new Set(calendarEntries.filter((e: any) => e.source === "task" && (e.starts_at ?? "").slice(0, 10) === day).map((e: any) => e.task_id));
+    new Set(calendarEntries.filter((e: any) => e.source === "task" && dayOf(e.starts_at) === day).map((e: any) => e.task_id));
   const dueTodayIds = taskIdsDueOn(today);
   const dueTomorrowIds = taskIdsDueOn(tomorrow);
 

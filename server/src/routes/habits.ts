@@ -1,69 +1,39 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
+import { addDays, daysBetween, localDay, localToday, weekday } from "../dates.js";
 
 export const habitsRouter = Router();
 
 function computeStreak(dates: string[]): number {
   // dates sorted descending, YYYY-MM-DD strings
   if (dates.length === 0) return 0;
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  if (dates[0] !== today && dates[0] !== yesterday) return 0;
+  const today = localToday();
+  if (dates[0] !== today && dates[0] !== addDays(today, -1)) return 0;
 
   let streak = 1;
-  let cursor = new Date(dates[0]);
   for (let i = 1; i < dates.length; i++) {
-    cursor.setDate(cursor.getDate() - 1);
-    const expected = cursor.toISOString().slice(0, 10);
-    if (dates[i] === expected) {
-      streak++;
-    } else {
-      break;
-    }
+    if (dates[i] !== addDays(dates[0], -i)) break;
+    streak++;
   }
   return streak;
-}
-
-// "Today" everywhere in this file (and the DB) is a UTC date string, not a local wall-clock
-// date — so weekday must be derived from that same UTC string, never from Date#getDay() on
-// "now" directly. Those two disagree for part of the day in any timezone ahead of UTC (e.g.
-// IST): local getDay() can already be "tomorrow" while the UTC date string is still "today",
-// which silently broke custom-day habit due-ness right around local midnight.
-function isoWeekday(iso: string): number {
-  return new Date(`${iso}T00:00:00Z`).getUTCDay();
 }
 
 // Monday-start ISO week, so "3/4 this week" means the same thing to a user regardless of
 // which day they check on, not a rolling 7-day window that shifts under them.
 function currentWeekStart(): string {
-  const today = new Date().toISOString().slice(0, 10);
-  const day = (isoWeekday(today) + 6) % 7; // 0 = Monday
-  const d = new Date(`${today}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - day);
-  return d.toISOString().slice(0, 10);
+  const today = localToday();
+  return addDays(today, -((weekday(today) + 6) % 7)); // back to Monday
 }
 function currentMonthStart(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  return `${localToday().slice(0, 7)}-01`;
 }
 // Monday-anchored 14-day buckets from a fixed epoch, so "this fortnight" is a stable, shared
 // boundary rather than "the 14 days since whenever you happened to create the habit."
 function currentBiweekStart(): string {
-  const epochMonday = new Date(2024, 0, 1); // a Monday
-  const monday = fromISO(currentWeekStart());
-  const diffWeeks = Math.floor((monday.getTime() - epochMonday.getTime()) / (7 * 86400000));
-  const biweekStartWeeks = diffWeeks - (diffWeeks % 2);
-  const d = new Date(epochMonday);
-  d.setDate(d.getDate() + biweekStartWeeks * 7);
-  return d.toISOString().slice(0, 10);
-}
-function fromISO(s: string): Date {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-function daysBetween(a: string, b: string): number {
-  return Math.round((fromISO(b).getTime() - fromISO(a).getTime()) / 86400000);
+  const weekStart = currentWeekStart();
+  const weeksSinceEpoch = Math.floor(daysBetween("2024-01-01", weekStart) / 7); // 2024-01-01 is a Monday
+  return addDays(weekStart, -(weeksSinceEpoch % 2) * 7);
 }
 
 habitsRouter.get("/", (req, res) => {
@@ -71,7 +41,7 @@ habitsRouter.get("/", (req, res) => {
   const habits = db
     .prepare(`SELECT * FROM habits ${includeArchived ? "" : "WHERE archived = 0"} ORDER BY order_index ASC, created_at ASC`)
     .all() as any[];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const weekStart = currentWeekStart();
   const monthStart = currentMonthStart();
   const withLogs = habits.map((h) => {
@@ -101,9 +71,9 @@ habitsRouter.get("/", (req, res) => {
     const customDays: number[] | null = h.custom_days ? JSON.parse(h.custom_days) : null;
     const dueToday =
       customDays !== null
-        ? customDays.includes(isoWeekday(today))
+        ? customDays.includes(weekday(today))
         : h.interval_days
-          ? daysBetween(h.created_at.slice(0, 10), today) % h.interval_days === 0
+          ? daysBetween(localDay(h.created_at), today) % h.interval_days === 0
           : true;
 
     const doneToday = periodProgress
@@ -210,7 +180,7 @@ habitsRouter.patch("/:id", (req, res) => {
 // Logs a completion for `date` (defaults to today). For quantity habits, `amount` adds to
 // the running total for that day instead of just marking a boolean done.
 habitsRouter.post("/:id/log", (req, res) => {
-  const date = req.body?.date ?? new Date().toISOString().slice(0, 10);
+  const date = req.body?.date ?? localToday();
   const amount = Number(req.body?.amount ?? 1);
   db.prepare(
     `INSERT INTO habit_logs (id, habit_id, date, amount) VALUES (?,?,?,?)
@@ -221,7 +191,7 @@ habitsRouter.post("/:id/log", (req, res) => {
 });
 
 habitsRouter.delete("/:id/log", (req, res) => {
-  const date = req.body?.date ?? new Date().toISOString().slice(0, 10);
+  const date = req.body?.date ?? localToday();
   db.prepare("DELETE FROM habit_logs WHERE habit_id = ? AND date = ?").run(req.params.id, date);
   res.status(204).end();
 });

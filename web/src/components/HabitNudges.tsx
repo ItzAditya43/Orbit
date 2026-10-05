@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
+import { todayISO } from "../dates";
 
 const NOTIFIED_KEY = "orbit-habit-notified";
 
@@ -35,7 +36,7 @@ export function HabitNudges() {
       if (!granted) granted = (await requestPermission()) === "granted";
       if (!granted) return;
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayISO();
       const notified = loadNotified();
       let changed = false;
 

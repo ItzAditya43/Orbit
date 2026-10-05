@@ -2,6 +2,7 @@ import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
 import { runTool, TOOL_NAMES, tools, READ_ONLY_TOOLS, type ToolName } from "../aiTools.js";
+import { addDays, localToday } from "../dates.js";
 
 export const aiRouter = Router();
 
@@ -205,7 +206,7 @@ function dayName(d: Date): string {
   return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()];
 }
 function tomorrowIso(): string {
-  return new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  return addDays(localToday(), 1);
 }
 
 async function askOllama(text: string, history: { role: "user" | "assistant"; content: string }[] = []): Promise<any | null> {
@@ -227,7 +228,7 @@ async function askOllama(text: string, history: { role: "user" | "assistant"; co
             // model that got "today" right but still miscalculated "tomorrow" as today's date
             // instead of +1 day. Handing over the two most common reference points directly
             // removes the arithmetic step (and its failure mode) for the cases that matter most.
-            `Today is ${dayName(new Date())} ${new Date().toISOString().slice(0, 10)}, tomorrow is ${tomorrowIso()} ` +
+            `Today is ${dayName(new Date())} ${localToday()}, tomorrow is ${tomorrowIso()} ` +
             "(YYYY-MM-DD). Use these directly for \"today\"/\"tomorrow\"; compute other relative dates " +
             '("next monday", "in 3 days") from today\'s date above, in this year, never a placeholder or ' +
             "training-data year.\n" +
@@ -356,6 +357,64 @@ async function callModel(systemPrompt: string, userPrompt: string): Promise<stri
   }
 }
 
+// The Priority scope check only ever talks to Ollama Cloud on its free tier — never a local
+// model and never any other provider — and only when a cloud key has been saved in Settings.
+// It uses the model picked in Settings if that is a cloud model, otherwise the cloud default.
+const DEFAULT_CLOUD_MODEL = "gpt-oss:20b-cloud";
+export function scopeAiAvailable(): boolean {
+  return !!getSetting("ollamaCloudApiKey", "") && getSetting<boolean>("aiScopeCheck", true) !== false;
+}
+
+export interface ScopeArea {
+  id: string;
+  name: string;
+  section: string;
+  restricted: boolean;
+}
+
+// Asks the model which (if any) of the user's priority areas an idea belongs to. Returns null
+// when AI isn't available, the request fails, or the answer can't be trusted — callers fall
+// back to "no match" in every one of those cases rather than guessing.
+export async function classifyScope(label: string, areas: ScopeArea[]): Promise<{ areaId: string | null; reason: string } | null> {
+  if (!scopeAiAvailable() || areas.length === 0) return null;
+  const apiKey = getSetting("ollamaCloudApiKey", "");
+  const configured = getSetting("ollamaModel", "");
+  const model = /cloud/i.test(configured) ? configured : DEFAULT_CLOUD_MODEL;
+  const list = areas.map((a, i) => `${i + 1}. "${a.name}" (section: ${a.section}${a.restricted ? ", something the user is deliberately avoiding" : ""})`).join("\n");
+  try {
+    const r = await fetch("https://ollama.com/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You decide whether a new idea belongs to one of a person's existing commitment areas. " +
+              "An idea belongs to an area only if it is clearly an instance of it or part of it — e.g. " +
+              'a specific game belongs to an area named "Games"; "learn violin" does not belong to "Studies" ' +
+              "unless the area is about music. When unsure, answer that nothing matches. " +
+              'Respond ONLY with strict JSON: {"match": <area number or null>, "reason": "<one short sentence>"}.',
+          },
+          { role: "user", content: `Areas:\n${list}\n\nNew idea: "${label}"` },
+        ],
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) return null;
+    const data: any = await r.json();
+    const parsed = extractJsonObject(data?.message?.content ?? "");
+    if (!parsed || typeof parsed !== "object") return null;
+    const index = Number(parsed.match);
+    const area = Number.isInteger(index) ? areas[index - 1] : undefined;
+    return { areaId: area?.id ?? null, reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 200) : "" };
+  } catch {
+    return null;
+  }
+}
+
 async function summarizeToolResult(originalText: string, toolName: string, result: unknown): Promise<string | null> {
   return callModel(
     "Answer the user's question in 1-3 short sentences using ONLY the JSON data given, as plain text " +
@@ -454,12 +513,7 @@ function priorityRank(p: string) {
 }
 
 function extractDate(lower: string): string | undefined {
-  const today = new Date();
-  if (lower.includes("today")) return today.toISOString().slice(0, 10);
-  if (lower.includes("tomorrow")) {
-    const d = new Date(today);
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
-  }
+  if (lower.includes("today")) return localToday();
+  if (lower.includes("tomorrow")) return addDays(localToday(), 1);
   return undefined;
 }

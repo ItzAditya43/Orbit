@@ -11,6 +11,7 @@ const DEFAULTS: Record<string, unknown> = {
   aiProvider: "local", // local (Ollama on this machine) | cloud (Ollama Cloud, free tier)
   ollamaModel: "", // empty = provider-specific default in routes/ai.ts
   ollamaCloudApiKey: "",
+  aiScopeCheck: true, // let the Priority check ask Ollama Cloud when plain word matching finds nothing
   notifyDueTasks: true,
   periodicReminderEnabled: false,
   periodicReminderIntervalMinutes: 60,

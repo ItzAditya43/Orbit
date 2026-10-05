@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./db.js";
+import { localToday } from "./dates.js";
 
 const RECURRENCES = ["daily", "weekly", "monthly", "interval", "custom_days"];
 
@@ -32,6 +33,22 @@ function nextOccurrence(task: any, baseIso: string): string {
   return addDaysIso(baseIso, 1); // daily
 }
 
+// A repeating task's subtasks are its checklist — the next occurrence gets the same list,
+// all unticked, however deep it nests.
+function copySubtasks(fromParentId: string, toParentId: string, now: string) {
+  const children = db
+    .prepare("SELECT * FROM tasks WHERE parent_id = ? AND deleted_at IS NULL ORDER BY order_index ASC, created_at ASC")
+    .all(fromParentId) as any[];
+  for (const child of children) {
+    const id = randomUUID();
+    db.prepare(
+      `INSERT INTO tasks (id, title, notes, project_id, parent_id, priority, estimate_minutes, order_index, color, energy, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(id, child.title, child.notes, child.project_id, toParentId, child.priority, child.estimate_minutes, child.order_index, child.color, child.energy, now, now);
+    copySubtasks(child.id, id, now);
+  }
+}
+
 // Marks a task done and, if it repeats, creates its next occurrence. Shared by the single
 // complete endpoint, bulk complete, and the AI complete_task tool so all three behave the same
 // — bulk/AI completion used to just flip the status, which silently ended a recurring series.
@@ -49,7 +66,7 @@ export function markTaskDone(taskId: string): any {
 
   // A task created via "Starts" has no due_date at all — it's due by its pattern, so the
   // occurrence being completed is today's (or the start date, if that's still in the future).
-  const today = now.slice(0, 10);
+  const today = localToday();
   const start = task.recurrence_start_date ? task.recurrence_start_date.slice(0, 10) : null;
   const base = task.due_date ? task.due_date.slice(0, 10) : start && start > today ? start : today;
   const nextDue = nextOccurrence(task, base);
@@ -67,5 +84,6 @@ export function markTaskDone(taskId: string): any {
     task.recurrence_end_date, task.estimate_minutes, task.color, task.energy, now, now
   );
   db.prepare("INSERT OR IGNORE INTO task_tags (task_id, tag_id) SELECT ?, tag_id FROM task_tags WHERE task_id = ?").run(newId, task.id);
+  copySubtasks(task.id, newId, now);
   return task;
 }

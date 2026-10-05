@@ -46,6 +46,8 @@ function importAll(data: Record<string, any[]>) {
             continue;
           }
         }
+        // Sections are unique by name too; one that already exists here is kept as it is.
+        if (table === "boundary_sections" && db.prepare("SELECT 1 FROM boundary_sections WHERE name = ? AND id != ?").get(row.name, row.id)) continue;
         if ("tag_id" in row && tagIdRemap.has(row.tag_id)) row.tag_id = tagIdRemap.get(row.tag_id);
         // Only columns this version of the schema actually has — a backup from a different
         // version shouldn't fail on a column that's since been added or dropped.
@@ -87,6 +89,27 @@ syncRouter.get("/backups", (_req, res) => {
       return { name: f, sizeBytes: stat.size, createdAt: stat.mtime.toISOString() };
     });
   res.json(files);
+});
+
+// Restores one of the automatic daily backups. Like import, this merges: everything in the
+// backup is written back as it was that day, and anything created since is left alone.
+syncRouter.post("/backups/:name/restore", (req, res) => {
+  const name = req.params.name;
+  // The name becomes a file path, so it has to be exactly a backup file name and nothing else.
+  if (!/^backup-\d{4}-\d{2}-\d{2}\.json$/.test(name)) return res.status(400).json({ error: "invalid backup name" });
+  const file = path.join(backupsDir, name);
+  if (!fs.existsSync(file)) return res.status(404).json({ error: "backup not found" });
+  let parsed: any;
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return res.status(400).json({ error: "backup file is unreadable" });
+  }
+  if (!parsed?.data || typeof parsed.data !== "object") return res.status(400).json({ error: "backup has no data" });
+  importAll(parsed.data);
+  const counts: Record<string, number> = {};
+  for (const [table, rows] of Object.entries(parsed.data)) if (Array.isArray(rows) && rows.length) counts[table] = rows.length;
+  res.json({ ok: true, exportedAt: parsed.exportedAt ?? null, counts });
 });
 
 syncRouter.get("/export", (_req, res) => {

@@ -5,6 +5,7 @@ import { api } from "../api";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, TrashIcon } from "../icons";
 import { TaskContextMenu } from "./TaskContextMenu";
+import { todayISO } from "../dates";
 
 const RECURRING_TYPES = ["daily", "weekly", "interval", "custom_days"];
 
@@ -14,7 +15,7 @@ const RECURRING_TYPES = ["daily", "weekly", "interval", "custom_days"];
 // shown alongside it (not instead of it) purely so recurrence stays visible at a glance.
 function dueBadge(due: string | null) {
   if (!due) return null;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   if (due < today) return { label: "Overdue", cls: "bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400" };
   if (due === today) return { label: "Today", cls: "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400" };
   return { label: due.slice(5), cls: "bg-neutral-100 dark:bg-neutral-800 text-neutral-500" };

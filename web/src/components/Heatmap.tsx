@@ -1,3 +1,5 @@
+import { localISODate } from "../dates";
+
 // GitHub-contribution-style heatmap. Takes any {date, count} series — used for both the
 // overall completion heatmap on Analytics and per-habit streak heatmaps on the Habits page,
 // so the visual pattern of "when did this actually happen" reads the same everywhere.
@@ -8,7 +10,7 @@ export function Heatmap({ data, weeks: weekCount = 16 }: { data: { date: string;
   for (let i = weekCount * 7 - 1; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    days.push(d.toISOString().slice(0, 10));
+    days.push(localISODate(d));
   }
   const max = Math.max(1, ...data.map((d) => d.count));
   const shade = (count: number) => {

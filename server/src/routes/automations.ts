@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
+import { localToday } from "../dates.js";
 
 export const automationsRouter = Router();
 
@@ -19,10 +20,17 @@ automationsRouter.post("/", (req, res) => {
 });
 
 automationsRouter.patch("/:id", (req, res) => {
-  const { isEnabled } = req.body ?? {};
-  if (typeof isEnabled === "boolean") {
-    db.prepare("UPDATE automations SET is_enabled = ? WHERE id = ?").run(isEnabled ? 1 : 0, req.params.id);
-  }
+  const existing: any = db.prepare("SELECT * FROM automations WHERE id = ?").get(req.params.id);
+  if (!existing) return res.status(404).json({ error: "not found" });
+  const { isEnabled, name, triggerType, actionType, config } = req.body ?? {};
+  db.prepare("UPDATE automations SET name = ?, trigger_type = ?, action_type = ?, config_json = ?, is_enabled = ? WHERE id = ?").run(
+    typeof name === "string" && name.trim() ? name.trim() : existing.name,
+    triggerType || existing.trigger_type,
+    actionType || existing.action_type,
+    config !== undefined ? JSON.stringify(config ?? {}) : existing.config_json,
+    typeof isEnabled === "boolean" ? (isEnabled ? 1 : 0) : existing.is_enabled,
+    req.params.id
+  );
   res.json(db.prepare("SELECT * FROM automations WHERE id = ?").get(req.params.id));
 });
 
@@ -61,7 +69,7 @@ notificationsRouter.post("/read-all", (_req, res) => {
 // Scans for due/overdue open tasks and creates a notification for each one not already
 // notified today. Meant to be polled by the client (no background scheduler exists yet).
 notificationsRouter.post("/check-due", (_req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const dueTasks = db
     .prepare("SELECT id, title, due_date FROM tasks WHERE deleted_at IS NULL AND status = 'open' AND due_date IS NOT NULL AND due_date <= ?")
     .all(today) as { id: string; title: string; due_date: string }[];

@@ -400,6 +400,43 @@ CREATE TABLE IF NOT EXISTS paired_devices (
 );
 `);
 
+// Priority-page sections as real rows. They used to exist only as the free-text `category` on
+// each boundary, which meant a section couldn't be empty, ordered, coloured, capped, or flagged
+// as "things I'm avoiding". boundaries.category still holds the section's name; renaming a
+// section updates both.
+db.exec(`
+CREATE TABLE IF NOT EXISTS boundary_sections (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  color TEXT,
+  max_active INTEGER, -- NULL = no limit
+  is_restricted INTEGER NOT NULL DEFAULT 0, -- 1 = matching one of these is a warning, not "in scope"
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+`);
+{
+  const insertSection = db.prepare(
+    "INSERT OR IGNORE INTO boundary_sections (id, name, is_restricted, order_index, created_at) VALUES (lower(hex(randomblob(16))), ?, ?, (SELECT COALESCE(MAX(order_index), -1) + 1 FROM boundary_sections), ?)"
+  );
+  const nowIso = new Date().toISOString();
+  // Every section that currently holds an active item gets a row (covers databases from
+  // before this table existed, and items created by anything that bypasses the sections API).
+  const inUse = db.prepare("SELECT DISTINCT category FROM boundaries WHERE is_active = 1 ORDER BY category").all() as { category: string }[];
+  for (const { category } of inUse) insertSection.run(category, category === "restricted" ? 1 : 0, nowIso);
+  // A brand-new install starts with the four suggested sections, once.
+  const seeded = db.prepare("SELECT 1 FROM settings WHERE key = '_prioritySectionsSeeded'").get();
+  if (!seeded) {
+    const anything = (db.prepare("SELECT (SELECT COUNT(*) FROM boundaries) + (SELECT COUNT(*) FROM boundary_sections) AS c").get() as any).c;
+    if (anything === 0) for (const name of ["main", "hobby", "game", "restricted"]) insertSection.run(name, name === "restricted" ? 1 : 0, nowIso);
+    db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('_prioritySectionsSeeded', 'true')").run();
+  }
+}
+
+const scopeReviewColumns = db.prepare("PRAGMA table_info(scope_review_items)").all() as { name: string }[];
+// When a parked idea should come back up for a decision (YYYY-MM-DD); NULL = no date set.
+if (!scopeReviewColumns.some((c) => c.name === "revisit_at")) db.exec("ALTER TABLE scope_review_items ADD COLUMN revisit_at TEXT");
+
 const checkinColumns = db.prepare("PRAGMA table_info(daily_checkins)").all() as { name: string }[];
 const checkinColumnNames = new Set(checkinColumns.map((c) => c.name));
 if (!checkinColumnNames.has("sleep_time")) db.exec("ALTER TABLE daily_checkins ADD COLUMN sleep_time TEXT"); // HH:MM, previous night

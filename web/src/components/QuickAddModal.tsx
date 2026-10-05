@@ -5,8 +5,15 @@ import { api, type Priority } from "../api";
 import { useQuickAddStore } from "../quickAddStore";
 import { useToastStore } from "../toastStore";
 import { PRIORITIES, PRIORITY_META } from "../priority";
-import { extractDate } from "../nlpDate";
-import { parseTaskLine } from "../taskLineParser";
+import { parseTaskLine, type ParsedLine } from "../taskLineParser";
+import { daysFromToday, todayISO } from "../dates";
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function describeRepeat(p: ParsedLine): string {
+  if (p.recurrence === "interval") return `every ${p.recurrenceIntervalDays} days`;
+  if (p.recurrence === "custom_days") return (p.recurrenceDays ?? []).map((d) => DAY_LABELS[d]).join(", ");
+  return p.recurrence ?? "";
+}
 
 export function QuickAddModal() {
   const { isOpen, close } = useQuickAddStore();
@@ -65,24 +72,38 @@ export function QuickAddModal() {
     return () => clearTimeout(t);
   }, [text, isBulk]);
 
-  const nlpPreview = useMemo(() => {
+  // What the line will be understood as, shown under the input as you type so a typo'd
+  // #project or a misread date is visible before the task is created, not after.
+  const preview = useMemo(() => {
     if (isBulk || !text.trim()) return null;
-    return extractDate(text);
-  }, [text, isBulk]);
+    const parsed = parseTaskLine(text.trim(), projects, tags);
+    const parts: string[] = [];
+    if (parsed.projectId) parts.push(`project: ${projects.find((p) => p.id === parsed.projectId)?.name}`);
+    if (parsed.tagIds.length) parts.push(`tags: ${parsed.tagIds.map((id) => tags.find((t) => t.id === id)?.name).join(", ")}`);
+    if (parsed.priority) parts.push(`priority: ${parsed.priority}`);
+    if (parsed.dueDate) parts.push(`${parsed.recurrence ? "starts" : "due"}: ${parsed.dueDate}`);
+    if (parsed.recurrence) parts.push(`repeats: ${describeRepeat(parsed)}`);
+    return parts.length ? parts.join("  ·  ") : null;
+  }, [text, isBulk, projects, tags]);
 
   if (!isOpen) return null;
 
   const manualDueDate =
     manualDue === "today"
-      ? new Date().toISOString().slice(0, 10)
+      ? todayISO()
       : manualDue === "tomorrow"
-        ? new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+        ? daysFromToday(1)
         : undefined;
 
   const checkBoundary = async (t: string) => {
     if (boundaries.length === 0) return;
     const scope = await api.boundaries.check(t);
-    if (!scope.inScope) {
+    if (scope.restricted) {
+      toast(`"${t}" looks like ${scope.restrictedBoundaries[0]?.name} — something you're avoiding right now`, {
+        actionLabel: "Review",
+        onAction: () => navigate("/boundaries"),
+      });
+    } else if (!scope.inScope) {
       toast(`"${t}" is outside your active Priority boundaries`, {
         actionLabel: "Review",
         onAction: () => navigate("/boundaries"),
@@ -102,6 +123,10 @@ export function QuickAddModal() {
           projectId: parsed.projectId,
           tagIds: parsed.tagIds.length ? parsed.tagIds : undefined,
           dueDate: parsed.dueDate,
+          priority: parsed.priority,
+          recurrence: parsed.recurrence,
+          recurrenceIntervalDays: parsed.recurrenceIntervalDays,
+          recurrenceDays: parsed.recurrenceDays,
           isInbox: !parsed.projectId && !parsed.dueDate,
         });
       }
@@ -116,10 +141,14 @@ export function QuickAddModal() {
     const title = parsed.title || text.trim();
     await api.tasks.create({
       title,
-      priority,
+      // "!high" typed in the line wins over the picker below it.
+      priority: parsed.priority ?? priority,
       dueDate,
       projectId: parsed.projectId,
       tagIds: parsed.tagIds.length ? parsed.tagIds : undefined,
+      recurrence: parsed.recurrence,
+      recurrenceIntervalDays: parsed.recurrenceIntervalDays,
+      recurrenceDays: parsed.recurrenceDays,
       isInbox: !dueDate && !parsed.projectId,
     });
     qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -151,16 +180,14 @@ export function QuickAddModal() {
                 submit();
               }
             }}
-            placeholder="What do you need to do? Try #Project @tag next tuesday — or paste multiple lines to add them all."
+            placeholder="What do you need to do? Try #Project @tag !high next tuesday, or every monday — or paste multiple lines to add them all."
             rows={isBulk ? Math.min(lines.length + 1, 8) : 1}
             className="w-full text-base bg-transparent outline-none placeholder:text-neutral-400 resize-none"
           />
 
           {isBulk && <p className="text-xs text-neutral-400">{lines.length} tasks will be created, one per line.</p>}
 
-          {!isBulk && nlpPreview && (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">Detected date: {nlpPreview.date}</p>
-          )}
+          {!isBulk && preview && <p className="text-xs text-emerald-600 dark:text-emerald-400">{preview}</p>}
 
           {!isBulk && duplicates.length > 0 && (
             <p className="text-xs text-amber-600 dark:text-amber-400">
