@@ -76,7 +76,10 @@ if (webDir) {
   // Client-side routes (/calendar, /projects/…) all load the same page.
   app.get(/^\/(?!api\/).*/, (_req, res) => {
     res.setHeader("Cache-Control", "no-cache");
-    res.sendFile(path.join(webDir, "index.html"));
+    // Relative to a root, not an absolute path: sendFile refuses any path with a dot-folder in
+    // it, and the packaged AppImage runs from one (/tmp/.mount_Orbit…), which made every page
+    // load fail there while working everywhere else.
+    res.sendFile("index.html", { root: webDir });
   });
 }
 
