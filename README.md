@@ -55,6 +55,62 @@ npm run cli -- ai "plan my day"
 
 Talks to the same running API server.
 
+## Using Orbit on your phone (or another computer)
+
+Orbit keeps one copy of your data, on the computer it runs on. Other devices don't get their
+own copy — they open that same Orbit in a browser, over [Tailscale](https://tailscale.com).
+
+**What Tailscale is**: a small app that joins your own devices into a private network of their
+own, wherever each one is (home Wi-Fi, mobile data, another country). Traffic between them is
+encrypted from device to device with WireGuard, so nobody in between — not your ISP, not the
+café Wi-Fi, not Tailscale — can read it. Tailscale's servers only help the devices find each
+other; they see which devices you have and when they connect, never what's sent. Each device
+gets a permanent private address (100.x.y.z) that only your devices can reach. The Personal
+plan is free (at the time of writing: up to 3 users and 100 devices — check
+tailscale.com/pricing).
+
+**One-time setup**
+
+1. On the computer running Orbit, install Tailscale and sign in. On Arch:
+   ```
+   sudo pacman -Syu tailscale
+   sudo systemctl enable --now tailscaled
+   sudo tailscale up        # prints a link — open it and sign in
+   ```
+   Other systems: tailscale.com/download.
+2. On the phone (or other computer), install the Tailscale app, sign in with the **same
+   account**, and switch it on.
+3. In Orbit: Settings → Other devices → **Turn on access from other devices**, then scan the
+   QR code with the phone. The link is permanent, so bookmark it or add it to the home screen.
+4. If the phone says "this site can't be reached", the computer's firewall is blocking it.
+   Allow Orbit's port for Tailscale devices only (Settings shows the exact command for your
+   firewall). For firewalld:
+   ```
+   sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="100.64.0.0/10" port port="4311" protocol="tcp" accept'
+   sudo firewall-cmd --reload
+   ```
+   For ufw: `sudo ufw allow in on tailscale0 to any port 4311 proto tcp`.
+
+**What to expect**
+
+- Works from anywhere both devices have internet — they don't need to be on the same network.
+- The computer has to be on, awake, and running Orbit; the phone can't work offline.
+- A change made on one device shows up on the others within a few seconds.
+- "Reset key" in Settings signs every device out; they need the new QR code to get back in.
+
+**How it's kept private** (`server/src/remoteAccess.ts`)
+
+- The normal API listener is bound to loopback only — nothing on the local network or the
+  internet can reach it.
+- Other devices go to a second listener (port 4311) bound to this machine's Tailscale address,
+  so only devices signed in to your own Tailscale network can connect at all. There is no public
+  address. If Tailscale isn't connected, nothing listens; it never falls back to a wider
+  interface.
+- That listener also requires an access key on every request. The key arrives in the link, is
+  swapped for an HttpOnly cookie on first visit, and repeated wrong keys are rate-limited.
+- Orbit never installs, configures or signs in to Tailscale, and never changes firewall rules —
+  it only asks the local Tailscale client for this machine's address and shows you commands.
+
 ## Structure
 
 ```
@@ -192,20 +248,7 @@ a date phrase, and a repeat (`every day/week/month`, `every N days`, `every mond
 that opens this same Orbit in a browser on your other devices, from anywhere, over your private
 Tailscale network. Nothing is copied or synced — the other device uses the web UI served by
 this machine's server, on the one database, and windows open on different devices pick up each
-other's changes within a few seconds. How it's kept private:
-
-- The normal API listener is bound to loopback only.
-- Other devices go to a second listener (port 4311) bound to this machine's Tailscale address,
-  so only devices signed in to your own Tailscale network can connect at all, over WireGuard
-  encryption that runs device to device. There is no public address and nobody in between can
-  read the traffic. If Tailscale isn't connected, nothing listens.
-- That listener also requires an access key on every request. The key arrives in the link, is
-  swapped for an HttpOnly cookie on first visit, and can be reset from Settings to sign every
-  device out.
-
-You install and sign in to Tailscale yourself (on this machine and on each other device); Orbit
-only asks the local client for this machine's address. The link is permanent. The computer has
-to be on with Orbit running. See `server/src/remoteAccess.ts`.
+other's changes within a few seconds. See "Using Orbit on your phone" below for setup.
 
 **Dates** follow the system timezone — "today" is the date on this machine's clock.
 

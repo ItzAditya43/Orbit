@@ -100,23 +100,30 @@ function DevicesSection() {
         {status?.enabled && <span className={`text-xs ${status.link ? "text-emerald-600" : "text-amber-600"}`}>{status.link ? "On" : "On — not reachable yet"}</span>}
       </div>
 
-      {status?.enabled && !status.tailscale.installed && (
+      {status?.enabled && !status.tailscale.installed && status.platform === "linux" && (
         <SetupSteps
           title="One-time setup: install Tailscale on this computer"
-          intro="Run these in a terminal. The last one prints a link — open it and sign in (a free account)."
-          commands={["sudo pacman -S tailscale", "sudo systemctl enable --now tailscaled", "sudo tailscale up"]}
-          after="Then install the Tailscale app on your phone and sign in with the same account. This page updates by itself once it's connected. (Not on Arch? Get it from tailscale.com/download.)"
+          intro="Run these in a terminal (shown for Arch — on other systems install Tailscale from tailscale.com/download). The last one prints a link — open it and sign in (a free account)."
+          commands={["sudo pacman -Syu tailscale", "sudo systemctl enable --now tailscaled", "sudo tailscale up"]}
+          after="Then install the Tailscale app on your phone and sign in with the same account. This page updates by itself once it's connected."
+        />
+      )}
+      {status?.enabled && !status.tailscale.installed && status.platform !== "linux" && (
+        <SetupSteps
+          title="One-time setup: install Tailscale on this computer"
+          intro="Download and install it, then sign in (a free account):"
+          commands={["https://tailscale.com/download"]}
+          after="Then install the Tailscale app on your phone and sign in with the same account. This page updates by itself once it's connected."
         />
       )}
       {status?.enabled && status.tailscale.installed && !status.tailscale.connected && (
         <SetupSteps
           title="Tailscale is installed but not connected"
-          intro="Start it and sign in — the second command prints a link to open:"
-          commands={["sudo systemctl enable --now tailscaled", "sudo tailscale up"]}
+          intro={status.platform === "linux" ? "Start it and sign in — the second command prints a link to open:" : "Open the Tailscale app on this computer and sign in."}
+          commands={status.platform === "linux" ? ["sudo systemctl enable --now tailscaled", "sudo tailscale up"] : ["Tailscale → Log in"]}
           after="This page updates by itself once it's connected."
         />
       )}
-
       {status?.enabled && status.error && <p className="text-xs text-red-500">{status.error}</p>}
 
       {status?.link && (
@@ -152,6 +159,23 @@ function DevicesSection() {
             <p className="text-neutral-400">
               Only devices on your Tailscale network can reach this address at all, and they still need the key in this code.
             </p>
+            {status.firewall && (
+              <details className="text-neutral-400">
+                <summary className="cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-200">
+                  Device says "this site can't be reached"?
+                </summary>
+                <div className="mt-1.5 space-y-1.5">
+                  <p>
+                    This computer's firewall ({status.firewall.name}) is probably blocking it. Run this once in a terminal — it
+                    opens Orbit's port to your Tailscale devices only, nothing on your Wi-Fi or the internet:
+                  </p>
+                  <code className="block px-2 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 whitespace-pre-wrap break-all">
+                    {status.firewall.commands.join("\n")}
+                  </code>
+                  <p>Also check the Tailscale app on that device is switched on.</p>
+                </div>
+              </details>
+            )}
           </div>
         </div>
       )}

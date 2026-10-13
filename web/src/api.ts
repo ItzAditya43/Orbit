@@ -83,6 +83,10 @@ export interface RemoteStatus {
   error: string | null;
   // Tailscale on this machine: installed / signed in and connected.
   tailscale: { installed: boolean; connected: boolean; name: string | null };
+  // A firewall running on this computer, with the commands that let Tailscale devices
+  // through it — shown as help for when a device can't connect.
+  firewall: { name: string; commands: string[] } | null;
+  platform: string;
 }
 
 export interface BoundarySection {

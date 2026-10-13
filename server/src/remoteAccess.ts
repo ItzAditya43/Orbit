@@ -3,7 +3,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes, timingSafeEqual, createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { db } from "./db.js";
 
 // Using Orbit from other devices (a phone, another computer) without copying data anywhere:
@@ -159,6 +159,47 @@ function findOnPath(name: string): string | null {
   return null;
 }
 
+function findTailscale(): string | null {
+  if (process.platform !== "win32") return findOnPath("tailscale");
+  // The Windows installer doesn't always put it on PATH for already-running programs.
+  const standard = path.join(process.env.ProgramFiles ?? "C:\\Program Files", "Tailscale", "tailscale.exe");
+  return findOnPath("tailscale.exe") ?? (fs.existsSync(standard) ? standard : null);
+}
+
+// Runs a helper program without ever blocking the server on it: these are other people's
+// tools talking to system services, and one of them hanging must not freeze every request
+// Orbit is handling. Resolves to the
+// output, or null on any failure or timeout.
+function probe(cmd: string, args: string[], timeoutMs: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: timeoutMs, windowsHide: true }, (err, stdout) => resolve(err ? null : String(stdout)));
+  });
+}
+
+// Caches an async lookup for a while and shares one in-flight run between concurrent callers.
+function cached<T>(ttlMs: number, load: () => Promise<T>) {
+  let at = 0;
+  let value: T | undefined;
+  let running: Promise<T> | null = null;
+  const get = (): Promise<T> => {
+    if (value !== undefined && Date.now() - at < ttlMs) return Promise.resolve(value);
+    running ??= load()
+      .then((v) => {
+        value = v;
+        at = Date.now();
+        return v;
+      })
+      .finally(() => {
+        running = null;
+      });
+    return running;
+  };
+  get.forget = () => {
+    at = 0;
+  };
+  return get;
+}
+
 // ---- Tailscale ------------------------------------------------------------------------------
 //
 // Orbit doesn't manage Tailscale — the user installs it and signs in — it only asks the local
@@ -171,39 +212,63 @@ interface TailscaleState {
   name: string | null;
 }
 
-let tailscaleCache: { at: number; state: TailscaleState } | null = null;
-
-function tailscaleState(): TailscaleState {
-  if (tailscaleCache && Date.now() - tailscaleCache.at < 4000) return tailscaleCache.state;
+const tailscaleState = cached<TailscaleState>(4000, async () => {
   const override = process.env.ORBIT_TAILSCALE;
-  const bin = override ? (fs.existsSync(override) ? override : null) : findOnPath("tailscale");
-  let state: TailscaleState = { installed: !!bin, running: false, ip: null, name: null };
-  if (bin) {
-    try {
-      const raw = execFileSync(bin, ["status", "--json"], { timeout: 4000, stdio: ["ignore", "pipe", "ignore"] }).toString();
-      const info = JSON.parse(raw);
-      const ip = (info?.Self?.TailscaleIPs ?? []).find((a: string) => /^\d+\.\d+\.\d+\.\d+$/.test(a)) ?? null;
-      const name = typeof info?.Self?.DNSName === "string" ? info.Self.DNSName.replace(/\.$/, "") || null : null;
-      state = { installed: true, running: info?.BackendState === "Running" && !!ip, ip, name };
-    } catch {
-      // not running, not signed in, or the service is stopped — reported as "not connected"
-    }
+  const bin = override ? (fs.existsSync(override) ? override : null) : findTailscale();
+  if (!bin) return { installed: false, running: false, ip: null, name: null };
+  try {
+    const info = JSON.parse((await probe(bin, ["status", "--json"], 4000)) ?? "");
+    const ip = (info?.Self?.TailscaleIPs ?? []).find((a: string) => /^\d+\.\d+\.\d+\.\d+$/.test(a)) ?? null;
+    const name = typeof info?.Self?.DNSName === "string" ? info.Self.DNSName.replace(/\.$/, "") || null : null;
+    return { installed: true, running: info?.BackendState === "Running" && !!ip, ip, name };
+  } catch {
+    // not running, not signed in, or the service is stopped — reported as "not connected"
+    return { installed: true, running: false, ip: null, name: null };
   }
-  tailscaleCache = { at: Date.now(), state };
-  return state;
+});
+
+// ---- firewall hint --------------------------------------------------------------------------
+//
+// A host firewall is the usual reason a device on the Tailscale network still can't connect:
+// it treats the Tailscale interface like any other and drops the port. Orbit can't change
+// firewall rules (that needs admin rights) — it works out the exact commands and shows them.
+// The rule they add opens this one port to Tailscale's address range only.
+
+interface FirewallStep {
+  name: string;
+  commands: string[];
 }
 
-// ---- wiring ---------------------------------------------------------------------------------
+// Only *whether* a firewall is running is looked up (a plain service query). Asking the
+// firewall what it currently allows was tried and dropped: firewall-cmd goes through polkit,
+// which can hang for many seconds or pop up a password prompt on the user's desktop. So this
+// is always advice for "if a device can't connect", never a claim that the rule is missing.
+const firewallStep = cached<FirewallStep | null>(60_000, async () => {
+  if (process.platform !== "linux") return null;
+  const active = async (unit: string) => (await probe("systemctl", ["is-active", unit], 3000))?.trim() === "active";
+  if (await active("firewalld")) {
+    return {
+      name: "firewalld",
+      commands: [
+        `sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="100.64.0.0/10" port port="${REMOTE_PORT}" protocol="tcp" accept'`,
+        "sudo firewall-cmd --reload",
+      ],
+    };
+  }
+  if (await active("ufw")) return { name: "ufw", commands: [`sudo ufw allow in on tailscale0 to any port ${REMOTE_PORT} proto tcp`] };
+  return null;
+});
 
-function apply(app: express.Express) {
-  const ts = getSetting("remoteAccessEnabled", false) ? tailscaleState() : null;
-  if (ts?.running && ts.ip) startListener(app, ts.ip);
+async function apply(app: express.Express) {
+  const ts = getSetting("remoteAccessEnabled", false) ? await tailscaleState() : null;
+  // The setting can have flipped while waiting on the lookup; honour what it says now.
+  if (ts?.running && ts.ip && getSetting("remoteAccessEnabled", false)) startListener(app, ts.ip);
   else stopListener();
 }
 
-function status() {
+async function status() {
   const enabled = getSetting("remoteAccessEnabled", false);
-  const ts = tailscaleState();
+  const ts = await tailscaleState();
   const listening = enabled && !!server && !listenError && boundHost === ts.ip;
   return {
     enabled,
@@ -212,41 +277,45 @@ function status() {
     link: listening ? `http://${ts.ip}:${REMOTE_PORT}/?key=${accessKey()}` : null,
     error: enabled ? listenError : null,
     tailscale: { installed: ts.installed, connected: ts.running, name: ts.name },
+    // Commands to let Tailscale devices through this machine's firewall, if one is running.
+    firewall: enabled ? await firewallStep() : null,
+    platform: process.platform,
   };
 }
 
 export function remoteAccessRouter(app: express.Express) {
   const router = Router();
 
-  router.get("/", (_req, res) => {
+  router.get("/", async (_req, res) => {
     // Re-evaluated on every look, so signing in to Tailscale after switching this on is
     // picked up as soon as the Settings page next checks.
-    apply(app);
-    res.json(status());
+    await apply(app);
+    res.json(await status());
   });
 
-  router.post("/", (req, res) => {
+  router.post("/", async (req, res) => {
     if (typeof req.body?.enabled === "boolean") setSetting("remoteAccessEnabled", req.body.enabled);
-    tailscaleCache = null;
-    apply(app);
-    res.json(status());
+    tailscaleState.forget();
+    firewallStep.forget();
+    await apply(app);
+    res.json(await status());
   });
 
   // New key: every link handed out so far, and every device already signed in, stops working.
-  router.post("/reset-key", (_req, res) => {
+  router.post("/reset-key", async (_req, res) => {
     setSetting("_remoteAccessKey", randomBytes(24).toString("base64url"));
-    res.json(status());
+    res.json(await status());
   });
 
   return router;
 }
 
 export function startRemoteAccess(app: express.Express) {
-  apply(app);
+  void apply(app);
   // Tailscale can come up after Orbit does (both start at login), or reconnect with the
   // listener gone — keep the listener matched to it without anyone opening Settings.
   setInterval(() => {
-    if (getSetting("remoteAccessEnabled", false)) apply(app);
+    if (getSetting("remoteAccessEnabled", false)) void apply(app);
   }, 20_000).unref();
 }
 
