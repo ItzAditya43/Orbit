@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { api } from "../api";
+import { api, type RemoteMethod } from "../api";
 import { useToastStore } from "../toastStore";
 import { TimeField } from "../components/TimeField";
 import { todayISO } from "../dates";
@@ -26,14 +26,41 @@ function QrCode({ value, size = 184 }: { value: string; size?: number }) {
   );
 }
 
+const REMOTE_METHODS: { value: RemoteMethod; title: string; body: string }[] = [
+  {
+    value: "tailscale",
+    title: "Private network (Tailscale)",
+    body: "Only your own devices can connect, encrypted device to device — nobody in between can read it, and there's no public address. Needs the free Tailscale app on each device. The link never changes.",
+  },
+  {
+    value: "cloudflare",
+    title: "Public link (Cloudflare)",
+    body: "Opens in any browser with nothing installed. The address is public (protected by the key), changes whenever Orbit restarts, and Cloudflare could technically see the traffic.",
+  },
+];
+
+function SetupSteps({ title, intro, commands, after }: { title: string; intro: string; commands: string[]; after: string }) {
+  return (
+    <div className="text-xs rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-1.5">
+      <p className="font-medium">{title}</p>
+      <p className="text-neutral-500">{intro}</p>
+      <code className="block px-2 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 whitespace-pre-wrap">
+        {commands.join("\n")}
+      </code>
+      <p className="text-neutral-400">{after}</p>
+    </div>
+  );
+}
+
 function DevicesSection() {
   const qc = useQueryClient();
   const toast = useToastStore((s) => s.push);
   const { data: status } = useQuery({
     queryKey: ["remote"],
     queryFn: api.remote.status,
-    // The link takes a few seconds to come back after switching on; watch for it.
-    refetchInterval: (q) => (q.state.data?.enabled && !q.state.data.link ? 2000 : 15000),
+    // While switched on with no link yet (tunnel starting, or waiting for Tailscale to be
+    // installed / signed in), keep looking so the code appears by itself.
+    refetchInterval: (q) => (q.state.data?.enabled && !q.state.data.link ? 2500 : 15000),
   });
   const [busy, setBusy] = useState(false);
 
@@ -48,6 +75,19 @@ function DevicesSection() {
     }
   };
 
+  const copyLink = async (link: string) => {
+    // The clipboard API only exists on https/localhost; this page may itself be open over a
+    // private-network http address.
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(link);
+      toast("Link copied");
+    } else {
+      toast("Select the link above and copy it");
+    }
+  };
+
+  const method = status?.method ?? "tailscale";
+
   return (
     <section className="space-y-3">
       <div>
@@ -56,6 +96,33 @@ function DevicesSection() {
           Use Orbit from your phone or another computer, from anywhere. Scanning the code opens this same Orbit in that
           device's browser — same data, live, nothing to sync. This computer has to be on with Orbit running.
         </p>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        {REMOTE_METHODS.map((m) => (
+          <label
+            key={m.value}
+            className={`flex gap-2 rounded-lg border p-3 cursor-pointer text-xs ${
+              method === m.value ? "border-neutral-900 dark:border-white" : "border-neutral-200 dark:border-neutral-800"
+            }`}
+          >
+            <input
+              type="radio"
+              name="remoteMethod"
+              className="mt-0.5"
+              checked={method === m.value}
+              disabled={busy || !status}
+              onChange={() => run(() => api.remote.setMethod(m.value))}
+            />
+            <span>
+              <span className="font-medium block">
+                {m.title}
+                {m.value === "tailscale" && <span className="ml-1 font-normal text-emerald-600">recommended</span>}
+              </span>
+              <span className="text-neutral-400">{m.body}</span>
+            </span>
+          </label>
+        ))}
       </div>
 
       <div className="flex items-center gap-3">
@@ -70,25 +137,36 @@ function DevicesSection() {
         >
           {status?.enabled ? "Turn off" : "Turn on access from other devices"}
         </button>
-        {status?.enabled && <span className="text-xs text-emerald-600">On</span>}
+        {status?.enabled && <span className={`text-xs ${status.link ? "text-emerald-600" : "text-amber-600"}`}>{status.link ? "On" : "On — not reachable yet"}</span>}
       </div>
 
-      {status?.enabled && !status.helperInstalled && (
-        <div className="text-xs rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-1">
-          <p className="font-medium">One-time setup needed</p>
-          <p className="text-neutral-500">
-            Reaching this computer from outside needs Cloudflare's free tunnel program. Install it once, then turn this off and
-            on again:
-          </p>
-          <code className="block px-2 py-1 rounded bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800">
-            sudo pacman -S cloudflared
-          </code>
-          <p className="text-neutral-400">(On other systems: install "cloudflared" from your package manager or cloudflare.com.)</p>
-        </div>
+      {status?.enabled && method === "tailscale" && !status.tailscale.installed && (
+        <SetupSteps
+          title="One-time setup: install Tailscale on this computer"
+          intro="Run these in a terminal. The last one prints a link — open it and sign in (a free account)."
+          commands={["sudo pacman -S tailscale", "sudo systemctl enable --now tailscaled", "sudo tailscale up"]}
+          after="Then install the Tailscale app on your phone and sign in with the same account. This page updates by itself once it's connected. (Not on Arch? Get it from tailscale.com/download.)"
+        />
+      )}
+      {status?.enabled && method === "tailscale" && status.tailscale.installed && !status.tailscale.connected && (
+        <SetupSteps
+          title="Tailscale is installed but not connected"
+          intro="Start it and sign in — the second command prints a link to open:"
+          commands={["sudo systemctl enable --now tailscaled", "sudo tailscale up"]}
+          after="This page updates by itself once it's connected."
+        />
+      )}
+      {status?.enabled && method === "cloudflare" && !status.helperInstalled && (
+        <SetupSteps
+          title="One-time setup needed"
+          intro="A public link needs Cloudflare's free tunnel program. Install it once:"
+          commands={["sudo pacman -S cloudflared"]}
+          after="This page updates by itself once it's installed. (Other systems: install cloudflared from your package manager.)"
+        />
       )}
 
       {status?.enabled && status.error && <p className="text-xs text-red-500">{status.error}</p>}
-      {status?.enabled && status.helperInstalled && status.starting && <p className="text-xs text-neutral-400">Getting a link…</p>}
+      {status?.enabled && status.starting && <p className="text-xs text-neutral-400">Getting a link…</p>}
 
       {status?.link && (
         <div className="flex flex-wrap gap-4 items-start rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
@@ -96,8 +174,9 @@ function DevicesSection() {
           <div className="flex-1 min-w-[14rem] space-y-2 text-xs">
             <p className="font-medium">Scan with your phone's camera</p>
             <p className="text-neutral-400">
-              Or open this link on any device. Treat it like a password — anyone who has it can read and change everything in
-              your Orbit.
+              {method === "tailscale"
+                ? "The phone needs the Tailscale app switched on, signed in to the same account. The link is permanent — bookmark it or add it to your home screen."
+                : "Or open this link on any device. Treat it like a password — anyone who has it can read and change everything in your Orbit."}
             </p>
             <input
               readOnly
@@ -107,13 +186,7 @@ function DevicesSection() {
               className="w-full rounded-md border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 font-mono text-[11px]"
             />
             <div className="flex gap-3">
-              <button
-                onClick={async () => {
-                  await navigator.clipboard.writeText(status.link!);
-                  toast("Link copied");
-                }}
-                className="px-2 py-1 rounded-md border border-neutral-200 dark:border-neutral-800"
-              >
+              <button onClick={() => copyLink(status.link!)} className="px-2 py-1 rounded-md border border-neutral-200 dark:border-neutral-800">
                 Copy link
               </button>
               <button
@@ -127,8 +200,9 @@ function DevicesSection() {
               </button>
             </div>
             <p className="text-neutral-400">
-              The address is new each time Orbit starts, so after restarting this computer you'll need to scan again. Data
-              travels through Cloudflare's network, encrypted, to reach this computer.
+              {method === "tailscale"
+                ? "Only devices on your Tailscale network can reach this address at all, and they still need the key in this code."
+                : "The address is new each time Orbit starts, so after restarting this computer you'll need to scan again."}
             </p>
           </div>
         </div>
