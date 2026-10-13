@@ -3,7 +3,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes, timingSafeEqual, createHash } from "node:crypto";
-import { spawn, execFileSync, type ChildProcess } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { db } from "./db.js";
 
 // Using Orbit from other devices (a phone, another computer) without copying data anywhere:
@@ -18,15 +18,12 @@ import { db } from "./db.js";
 // Which listener a request arrived on is what decides whether it needs the key — not its
 // source address, which says nothing useful here.
 //
-// How other devices reach the remote listener is the user's choice:
-//   - "tailscale" (default): it binds to this machine's Tailscale address, so only devices on
-//     the user's own private Tailscale network can connect at all, over WireGuard encryption
-//     that runs device to device — no third party can read the traffic, and there is no public
-//     address. The address is permanent.
-//   - "cloudflare": it stays on loopback and a Cloudflare quick tunnel carries traffic in from
-//     a public, random https address. Works from any browser with nothing installed, but
-//     Cloudflare terminates the encryption and so could see the traffic.
-// Either way nothing is opened on the ordinary local network.
+// Other devices reach the remote listener over Tailscale, and only that way: it binds to this
+// machine's Tailscale address, so only devices on the user's own private Tailscale network can
+// connect at all, over WireGuard encryption that runs device to device. No third party can
+// read the traffic and there is no public address. If Tailscale isn't connected, nothing
+// listens — it never falls back to a wider interface. Nothing is opened on the ordinary local
+// network either.
 
 export const REMOTE_PORT = process.env.ORBIT_REMOTE_PORT ? Number(process.env.ORBIT_REMOTE_PORT) : 4311;
 const COOKIE = "orbit_key";
@@ -72,15 +69,15 @@ function cookieValue(header: string | undefined, name: string): string | undefin
 }
 
 // Wrong-key attempts per caller. The key is 192 random bits so guessing is hopeless anyway;
-// this just stops something hammering the public address from costing anything.
+// this just stops something hammering the endpoint from costing anything.
 const failures = new Map<string, { count: number; resetAt: number }>();
 const MAX_FAILURES = 20;
 const FAILURE_WINDOW_MS = 10 * 60_000;
 
 function callerId(req: express.Request): string {
-  const forwarded = req.headers["cf-connecting-ip"] ?? req.headers["x-forwarded-for"];
-  const first = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0];
-  return (first ?? req.socket.remoteAddress ?? "unknown").trim();
+  // The connecting address itself — connections arrive directly, so forwarding headers would
+  // only be something a caller made up to dodge the limit.
+  return req.socket.remoteAddress ?? "unknown";
 }
 
 const DENIED_PAGE = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -102,10 +99,9 @@ function requireKey(req: express.Request, res: express.Response, next: express.N
   // First visit: the link carries ?key=. Swap it for a cookie and redirect to the clean URL so
   // the key isn't left sitting in the address bar, history, or anything the page loads.
   if (keyMatches(req.query.key)) {
-    const https = req.headers["x-forwarded-proto"] === "https";
     res.setHeader(
       "Set-Cookie",
-      `${COOKIE}=${encodeURIComponent(accessKey())}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax${https ? "; Secure" : ""}`
+      `${COOKIE}=${encodeURIComponent(accessKey())}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax`
     );
     const url = new URL(req.originalUrl, "http://x");
     url.searchParams.delete("key");
@@ -197,127 +193,25 @@ function tailscaleState(): TailscaleState {
   return state;
 }
 
-// ---- tunnel ---------------------------------------------------------------------------------
-//
-// Reaching this machine from outside needs something to carry traffic in. A Cloudflare quick
-// tunnel does that with no account and no router setup: the cloudflared program (installed by
-// the user — Orbit never downloads it) dials out and hands back a public https address that
-// forwards to the listener above, so everything arriving through it still has to present the
-// access key. The address is random and changes every time the tunnel starts.
-
-function helperPath(): string | null {
-  if (process.env.ORBIT_CLOUDFLARED) return fs.existsSync(process.env.ORBIT_CLOUDFLARED) ? process.env.ORBIT_CLOUDFLARED : null;
-  return findOnPath("cloudflared");
-}
-
-let tunnel: ChildProcess | null = null;
-let tunnelUrl: string | null = null;
-let tunnelError: string | null = null;
-
-function startTunnel() {
-  if (tunnel) return;
-  const bin = helperPath();
-  if (!bin) {
-    tunnelError = null;
-    return;
-  }
-  tunnelUrl = null;
-  tunnelError = null;
-  // Run under a tiny shell watchdog that stops the helper when this server process goes away.
-  // The desktop app stops the server with SIGKILL, which gives it no chance to clean up its
-  // own children — without this an orphaned tunnel would keep the public address alive.
-  const script = '"$0" tunnel --no-autoupdate --url "$1" & child=$!; while kill -0 "$2" 2>/dev/null && kill -0 $child 2>/dev/null; do sleep 2; done; kill $child 2>/dev/null';
-  const child = spawn("sh", ["-c", script, bin, `http://127.0.0.1:${REMOTE_PORT}`, String(process.pid)], {
-    stdio: ["ignore", "pipe", "pipe"],
-    // Its own process group, so stopping it takes the helper down along with the shell. Killing
-    // just the shell left the helper running — and the public address live — after "Turn off".
-    detached: true,
-  });
-  const onOutput = (chunk: Buffer) => {
-    const match = chunk.toString().match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
-    if (match) tunnelUrl = match[0];
-  };
-  child.stdout?.on("data", onOutput);
-  child.stderr?.on("data", onOutput);
-  child.on("error", (err) => {
-    tunnelError = err.message;
-  });
-  child.on("exit", () => {
-    if (tunnel !== child) return;
-    tunnel = null;
-    tunnelError = tunnelUrl ? "the tunnel stopped — switch this off and on again to get a new link" : "the tunnel couldn't start — check the internet connection";
-    tunnelUrl = null;
-  });
-  tunnel = child;
-}
-
-function killGroup(child: ChildProcess | null) {
-  if (!child?.pid) return;
-  try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch {
-    // already gone
-  }
-}
-
-function stopTunnel() {
-  const child = tunnel;
-  tunnel = null;
-  tunnelUrl = null;
-  tunnelError = null;
-  killGroup(child);
-}
-
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.once(signal, () => {
-    killGroup(tunnel);
-    process.exit(0);
-  });
-}
-
 // ---- wiring ---------------------------------------------------------------------------------
 
-type Method = "tailscale" | "cloudflare";
-const method = (): Method => (getSetting<string>("remoteAccessMethod", "tailscale") === "cloudflare" ? "cloudflare" : "tailscale");
-
 function apply(app: express.Express) {
-  if (!getSetting("remoteAccessEnabled", false)) {
-    stopTunnel();
-    stopListener();
-    return;
-  }
-  if (method() === "cloudflare") {
-    startListener(app, "127.0.0.1");
-    startTunnel();
-    return;
-  }
-  stopTunnel();
-  const ts = tailscaleState();
-  // No Tailscale address means nowhere private to listen — so don't listen at all, rather
-  // than fall back to something wider.
-  if (ts.running && ts.ip) startListener(app, ts.ip);
+  const ts = getSetting("remoteAccessEnabled", false) ? tailscaleState() : null;
+  if (ts?.running && ts.ip) startListener(app, ts.ip);
   else stopListener();
 }
 
 function status() {
   const enabled = getSetting("remoteAccessEnabled", false);
-  const how = method();
   const ts = tailscaleState();
-  const listening = !!server && !listenError;
-  let link: string | null = null;
-  if (enabled && how === "cloudflare" && tunnelUrl) link = `${tunnelUrl}/?key=${accessKey()}`;
-  // The numeric address rather than the device's name: it's just as permanent and works
-  // whether or not the network has name lookup (MagicDNS) switched on.
-  if (enabled && how === "tailscale" && listening && boundHost === ts.ip) link = `http://${ts.ip}:${REMOTE_PORT}/?key=${accessKey()}`;
+  const listening = enabled && !!server && !listenError && boundHost === ts.ip;
   return {
     enabled,
-    method: how,
-    link,
-    // "starting" covers the few seconds between switching on and the address coming back.
-    starting: enabled && how === "cloudflare" && !!tunnel && !tunnelUrl,
-    error: enabled ? listenError ?? (how === "cloudflare" ? tunnelError : null) : null,
+    // The numeric address rather than the device's name: it's just as permanent and works
+    // whether or not the network has name lookup (MagicDNS) switched on.
+    link: listening ? `http://${ts.ip}:${REMOTE_PORT}/?key=${accessKey()}` : null,
+    error: enabled ? listenError : null,
     tailscale: { installed: ts.installed, connected: ts.running, name: ts.name },
-    helperInstalled: !!helperPath(),
   };
 }
 
@@ -333,7 +227,6 @@ export function remoteAccessRouter(app: express.Express) {
 
   router.post("/", (req, res) => {
     if (typeof req.body?.enabled === "boolean") setSetting("remoteAccessEnabled", req.body.enabled);
-    if (req.body?.method === "tailscale" || req.body?.method === "cloudflare") setSetting("remoteAccessMethod", req.body.method);
     tailscaleCache = null;
     apply(app);
     res.json(status());
@@ -353,7 +246,7 @@ export function startRemoteAccess(app: express.Express) {
   // Tailscale can come up after Orbit does (both start at login), or reconnect with the
   // listener gone — keep the listener matched to it without anyone opening Settings.
   setInterval(() => {
-    if (getSetting("remoteAccessEnabled", false) && method() === "tailscale") apply(app);
+    if (getSetting("remoteAccessEnabled", false)) apply(app);
   }, 20_000).unref();
 }
 

@@ -77,17 +77,12 @@ export interface Task {
   subtasks?: Task[];
 }
 
-export type RemoteMethod = "tailscale" | "cloudflare";
 export interface RemoteStatus {
   enabled: boolean;
-  method: RemoteMethod;
   link: string | null;
-  starting: boolean;
   error: string | null;
-  // Tailscale: installed on this machine / signed in and connected.
+  // Tailscale on this machine: installed / signed in and connected.
   tailscale: { installed: boolean; connected: boolean; name: string | null };
-  // Cloudflare: whether the cloudflared program is installed.
-  helperInstalled: boolean;
 }
 
 export interface BoundarySection {
@@ -407,7 +402,6 @@ export const api = {
   remote: {
     status: () => req<RemoteStatus>(`/remote`),
     setEnabled: (enabled: boolean) => req<RemoteStatus>(`/remote`, { method: "POST", body: JSON.stringify({ enabled }) }),
-    setMethod: (method: RemoteMethod) => req<RemoteStatus>(`/remote`, { method: "POST", body: JSON.stringify({ method }) }),
     resetKey: () => req<RemoteStatus>(`/remote/reset-key`, { method: "POST" }),
   },
   attachments: {

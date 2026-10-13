@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { api, type RemoteMethod } from "../api";
+import { api } from "../api";
 import { useToastStore } from "../toastStore";
 import { TimeField } from "../components/TimeField";
 import { todayISO } from "../dates";
@@ -26,19 +26,6 @@ function QrCode({ value, size = 184 }: { value: string; size?: number }) {
   );
 }
 
-const REMOTE_METHODS: { value: RemoteMethod; title: string; body: string }[] = [
-  {
-    value: "tailscale",
-    title: "Private network (Tailscale)",
-    body: "Only your own devices can connect, encrypted device to device — nobody in between can read it, and there's no public address. Needs the free Tailscale app on each device. The link never changes.",
-  },
-  {
-    value: "cloudflare",
-    title: "Public link (Cloudflare)",
-    body: "Opens in any browser with nothing installed. The address is public (protected by the key), changes whenever Orbit restarts, and Cloudflare could technically see the traffic.",
-  },
-];
-
 function SetupSteps({ title, intro, commands, after }: { title: string; intro: string; commands: string[]; after: string }) {
   return (
     <div className="text-xs rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-1.5">
@@ -58,8 +45,8 @@ function DevicesSection() {
   const { data: status } = useQuery({
     queryKey: ["remote"],
     queryFn: api.remote.status,
-    // While switched on with no link yet (tunnel starting, or waiting for Tailscale to be
-    // installed / signed in), keep looking so the code appears by itself.
+    // While switched on with no link yet (waiting for Tailscale to be installed or signed
+    // in), keep looking so the code appears by itself.
     refetchInterval: (q) => (q.state.data?.enabled && !q.state.data.link ? 2500 : 15000),
   });
   const [busy, setBusy] = useState(false);
@@ -86,43 +73,16 @@ function DevicesSection() {
     }
   };
 
-  const method = status?.method ?? "tailscale";
-
   return (
     <section className="space-y-3">
       <div>
         <h2 className="text-sm font-semibold">Other devices</h2>
         <p className="text-xs text-neutral-400 mt-0.5">
-          Use Orbit from your phone or another computer, from anywhere. Scanning the code opens this same Orbit in that
-          device's browser — same data, live, nothing to sync. This computer has to be on with Orbit running.
+          Use Orbit from your phone or another computer, from anywhere, over your private Tailscale network. Scanning the
+          code opens this same Orbit in that device's browser — same data, live, nothing copied. Only your own signed-in
+          devices can connect, encrypted device to device; there is no public address. This computer has to be on with
+          Orbit running.
         </p>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2">
-        {REMOTE_METHODS.map((m) => (
-          <label
-            key={m.value}
-            className={`flex gap-2 rounded-lg border p-3 cursor-pointer text-xs ${
-              method === m.value ? "border-neutral-900 dark:border-white" : "border-neutral-200 dark:border-neutral-800"
-            }`}
-          >
-            <input
-              type="radio"
-              name="remoteMethod"
-              className="mt-0.5"
-              checked={method === m.value}
-              disabled={busy || !status}
-              onChange={() => run(() => api.remote.setMethod(m.value))}
-            />
-            <span>
-              <span className="font-medium block">
-                {m.title}
-                {m.value === "tailscale" && <span className="ml-1 font-normal text-emerald-600">recommended</span>}
-              </span>
-              <span className="text-neutral-400">{m.body}</span>
-            </span>
-          </label>
-        ))}
       </div>
 
       <div className="flex items-center gap-3">
@@ -140,7 +100,7 @@ function DevicesSection() {
         {status?.enabled && <span className={`text-xs ${status.link ? "text-emerald-600" : "text-amber-600"}`}>{status.link ? "On" : "On — not reachable yet"}</span>}
       </div>
 
-      {status?.enabled && method === "tailscale" && !status.tailscale.installed && (
+      {status?.enabled && !status.tailscale.installed && (
         <SetupSteps
           title="One-time setup: install Tailscale on this computer"
           intro="Run these in a terminal. The last one prints a link — open it and sign in (a free account)."
@@ -148,7 +108,7 @@ function DevicesSection() {
           after="Then install the Tailscale app on your phone and sign in with the same account. This page updates by itself once it's connected. (Not on Arch? Get it from tailscale.com/download.)"
         />
       )}
-      {status?.enabled && method === "tailscale" && status.tailscale.installed && !status.tailscale.connected && (
+      {status?.enabled && status.tailscale.installed && !status.tailscale.connected && (
         <SetupSteps
           title="Tailscale is installed but not connected"
           intro="Start it and sign in — the second command prints a link to open:"
@@ -156,17 +116,8 @@ function DevicesSection() {
           after="This page updates by itself once it's connected."
         />
       )}
-      {status?.enabled && method === "cloudflare" && !status.helperInstalled && (
-        <SetupSteps
-          title="One-time setup needed"
-          intro="A public link needs Cloudflare's free tunnel program. Install it once:"
-          commands={["sudo pacman -S cloudflared"]}
-          after="This page updates by itself once it's installed. (Other systems: install cloudflared from your package manager.)"
-        />
-      )}
 
       {status?.enabled && status.error && <p className="text-xs text-red-500">{status.error}</p>}
-      {status?.enabled && status.starting && <p className="text-xs text-neutral-400">Getting a link…</p>}
 
       {status?.link && (
         <div className="flex flex-wrap gap-4 items-start rounded-lg border border-neutral-200 dark:border-neutral-800 p-3">
@@ -174,9 +125,8 @@ function DevicesSection() {
           <div className="flex-1 min-w-[14rem] space-y-2 text-xs">
             <p className="font-medium">Scan with your phone's camera</p>
             <p className="text-neutral-400">
-              {method === "tailscale"
-                ? "The phone needs the Tailscale app switched on, signed in to the same account. The link is permanent — bookmark it or add it to your home screen."
-                : "Or open this link on any device. Treat it like a password — anyone who has it can read and change everything in your Orbit."}
+              The phone needs the Tailscale app switched on, signed in to the same account. The link is permanent — bookmark
+              it or add it to your home screen.
             </p>
             <input
               readOnly
@@ -200,9 +150,7 @@ function DevicesSection() {
               </button>
             </div>
             <p className="text-neutral-400">
-              {method === "tailscale"
-                ? "Only devices on your Tailscale network can reach this address at all, and they still need the key in this code."
-                : "The address is new each time Orbit starts, so after restarting this computer you'll need to scan again."}
+              Only devices on your Tailscale network can reach this address at all, and they still need the key in this code.
             </p>
           </div>
         </div>

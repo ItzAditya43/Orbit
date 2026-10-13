@@ -189,25 +189,23 @@ a date phrase, and a repeat (`every day/week/month`, `every N days`, `every mond
 `every mon wed fri`, `every weekday`). Parsed locally; a preview shows what was understood.
 
 **Other devices (phone, another computer)**: Settings → Other devices gives a QR code / link
-that opens this same Orbit in any browser, from anywhere. Nothing is copied or synced — the
-other device uses the web UI served by this machine's server, on the one database, and windows
-open on different devices pick up each other's changes within a few seconds. The normal API
-listener is bound to loopback only; other devices go to a second listener (port 4311) that
-requires an access key on every request. The key arrives in the link, is swapped for an
-HttpOnly cookie on first visit, and can be reset from Settings to sign every device out. Two
-ways to reach that listener, chosen in Settings:
+that opens this same Orbit in a browser on your other devices, from anywhere, over your private
+Tailscale network. Nothing is copied or synced — the other device uses the web UI served by
+this machine's server, on the one database, and windows open on different devices pick up each
+other's changes within a few seconds. How it's kept private:
 
-- **Tailscale (default)** — the listener binds to this machine's Tailscale address, so only
-  devices on your own Tailscale network can connect, over WireGuard encryption that runs device
-  to device. No public address, nobody in between can read the traffic, and the link never
-  changes. You install and sign in to Tailscale yourself; Orbit only asks the local client for
-  this machine's address. If Tailscale isn't connected, nothing listens.
-- **Cloudflare quick tunnel** — the listener stays on loopback and `cloudflared` (which you
-  install yourself) carries traffic in from a public, random https address. Needs nothing on
-  the other device, but the address changes whenever Orbit restarts and Cloudflare terminates
-  the encryption.
+- The normal API listener is bound to loopback only.
+- Other devices go to a second listener (port 4311) bound to this machine's Tailscale address,
+  so only devices signed in to your own Tailscale network can connect at all, over WireGuard
+  encryption that runs device to device. There is no public address and nobody in between can
+  read the traffic. If Tailscale isn't connected, nothing listens.
+- That listener also requires an access key on every request. The key arrives in the link, is
+  swapped for an HttpOnly cookie on first visit, and can be reset from Settings to sign every
+  device out.
 
-The computer has to be on with Orbit running. See `server/src/remoteAccess.ts`.
+You install and sign in to Tailscale yourself (on this machine and on each other device); Orbit
+only asks the local client for this machine's address. The link is permanent. The computer has
+to be on with Orbit running. See `server/src/remoteAccess.ts`.
 
 **Dates** follow the system timezone — "today" is the date on this machine's clock.
 
